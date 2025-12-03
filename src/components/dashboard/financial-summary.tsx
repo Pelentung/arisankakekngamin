@@ -1,15 +1,22 @@
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { DollarSign, PiggyBank, CircleAlert } from 'lucide-react';
+import { Wallet, PiggyBank, CircleAlert } from 'lucide-react';
 import { arisanData } from '@/app/data';
 import { useMemo } from 'react';
 
 export function FinancialSummary() {
-  const { totalContributions, currentPayout, outstandingPaymentsCount } =
+  const { remainingCash, currentPayout, outstandingPaymentsCount } =
     useMemo(() => {
-      const paidPayments = arisanData.payments.filter((p) => p.status === 'Paid' && p.groupId === 'g1');
-      const totalContributions = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+      // Calculate total income from all paid contributions across all groups
+      const totalIncome = arisanData.payments
+        .filter((p) => p.status === 'Paid')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      // Calculate total expenses
+      const totalExpenses = arisanData.expenses.reduce((sum, e) => sum + e.amount, 0);
+
+      const remainingCash = totalIncome - totalExpenses;
       
       const mainGroup = arisanData.groups.find(g => g.id === 'g1');
       const currentPayout = mainGroup ? mainGroup.contributionAmount * mainGroup.memberIds.length : 0;
@@ -18,7 +25,7 @@ export function FinancialSummary() {
         (p) => p.groupId === 'g1' && (p.status === 'Unpaid' || p.status === 'Late')
       ).length;
 
-      return { totalContributions, currentPayout, outstandingPaymentsCount };
+      return { remainingCash, currentPayout, outstandingPaymentsCount };
     }, []);
 
   return (
@@ -26,9 +33,9 @@ export function FinancialSummary() {
       <Card className="hover:border-primary/50 transition-colors">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            Total Iuran (Siklus Ini)
+            Sisa Kas
           </CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <Wallet className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold font-headline">
@@ -36,9 +43,9 @@ export function FinancialSummary() {
               style: 'currency',
               currency: 'IDR',
               minimumFractionDigits: 0,
-            }).format(totalContributions)}
+            }).format(remainingCash)}
           </div>
-          <p className="text-xs text-muted-foreground">Hanya dari grup utama</p>
+          <p className="text-xs text-muted-foreground">Saldo kas sampai dengan saat ini</p>
         </CardContent>
       </Card>
       <Card className="hover:border-primary/50 transition-colors">
