@@ -17,7 +17,7 @@ export function GroupsList() {
     <Card>
       <CardHeader>
         <CardTitle>Grup Arisan</CardTitle>
-        <CardDescription>Kelola dan lihat semua grup arisan keluarga.</CardDescription>
+        <CardDescription>Ringkasan grup arisan yang terdaftar.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {arisanData.groups.map((group) => (
@@ -42,10 +42,10 @@ export function GroupsList() {
         ))}
       </CardContent>
       <CardFooter>
-        <Button className="w-full" asChild>
-          <Link href="/grup/kelola">
+        <Button className="w-full" asChild variant="outline">
+          <Link href="/grup">
             <Users className="mr-2 h-4 w-4" />
-            Kelola Grup
+            Lihat Detail Grup
           </Link>
         </Button>
       </CardFooter>
