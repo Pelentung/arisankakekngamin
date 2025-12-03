@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Coins, LayoutDashboard, Settings, Trophy, Users } from 'lucide-react';
+import { Coins, LayoutDashboard, Settings, Trophy, Users, FileText } from 'lucide-react';
 
 import {
   SidebarHeader,
@@ -16,6 +16,7 @@ import { Separator } from '../ui/separator';
 
 const navItems = [
   { href: '/', label: 'Dasbor', icon: LayoutDashboard },
+  { href: '/laporan', label: 'Laporan', icon: FileText },
   { href: '#', label: 'Grup', icon: Users },
   { href: '#', label: 'Pembayaran', icon: Coins },
   { href: '#', label: 'Pemenang', icon: Trophy },
