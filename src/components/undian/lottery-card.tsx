@@ -19,9 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Trophy } from 'lucide-react';
+import { Trophy, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { format, getMonth, getYear } from 'date-fns';
 
 interface LotteryCardProps {
     group: Group;
@@ -36,27 +37,32 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const [currentWinner, setCurrentWinner] = useState<Member | undefined>(undefined);
   const [drawnWinner, setDrawnWinner] = useState<Member | undefined>(undefined);
+  const [_, setForceRender] = useState(0);
 
   useEffect(() => {
-    if (group?.currentWinnerId) {
+    const targetGroup = arisanData.groups.find(g => g.id === group.id);
+    if (targetGroup?.currentWinnerId) {
       const winner = arisanData.members.find(
-        (m) => m.id === group.currentWinnerId
+        (m) => m.id === targetGroup.currentWinnerId
       );
       setCurrentWinner(winner);
     } else {
         setCurrentWinner(undefined);
     }
   }, [group]);
-
+  
   const handleDrawWinner = () => {
-    if (!group) return;
+    const targetGroup = arisanData.groups.find(g => g.id === group.id);
+    if (!targetGroup) return;
 
-    const eligibleMembers = arisanData.members.filter(m => group.memberIds.includes(m.id) && m.id !== currentWinner?.id);
+    const winnerIds = targetGroup.winnerHistory?.map(wh => wh.memberId) || [];
+    const eligibleMembers = arisanData.members.filter(m => targetGroup.memberIds.includes(m.id) && !winnerIds.includes(m.id));
+
     if (eligibleMembers.length === 0) {
         toast({
-            title: "Undian Gagal",
-            description: "Tidak cukup anggota yang memenuhi syarat untuk mengundi.",
-            variant: "destructive",
+            title: "Undian Selesai",
+            description: "Semua anggota di grup ini sudah pernah menarik arisan.",
+            variant: "default",
         });
         return;
     }
@@ -67,42 +73,70 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
 
     setTimeout(() => {
       setDrawnWinner(newWinner);
+      
+      // Update data source
+      targetGroup.currentWinnerId = newWinner.id;
+      const drawMonth = `${getYear(new Date())}-${getMonth(new Date()) + 1}`;
+      if (!targetGroup.winnerHistory) {
+        targetGroup.winnerHistory = [];
+      }
+      targetGroup.winnerHistory.push({ month: drawMonth, memberId: newWinner.id });
+
       setIsDrawing(false);
       setShowWinnerDialog(true);
+      setCurrentWinner(newWinner);
+      setForceRender(v => v + 1);
+
       toast({
         title: "🎉 Penarik Baru Telah Diundi! 🎉",
         description: `Selamat kepada ${newWinner.name}!`,
       });
-      // In a real app, you would update the group's currentWinnerId here
-      // For this demo, we can simulate it if needed, or just show the dialog
-    }, 2000); // Simulate drawing animation
+    }, 2000);
   };
+
+  const groupMembers = arisanData.members.filter(m => group.memberIds.includes(m.id));
+  const winnerIds = group.winnerHistory?.map(wh => wh.memberId) || [];
 
   return (
     <>
-      <Card>
+      <Card className="flex flex-col">
         <CardHeader className="pb-4">
           <CardTitle>{title}</CardTitle>
           <CardDescription>
             {description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center gap-4 text-center min-h-[180px]">
-            <Trophy className={cn("w-12 h-12 text-amber-400 transition-transform duration-500", isDrawing && "animate-pulse scale-110")}/>
+        <CardContent className="flex-grow flex flex-col items-center justify-center gap-4 text-center min-h-[180px]">
             {currentWinner ? (
                 <>
-                <p className="text-sm text-muted-foreground">Yang Menarik Saat Ini</p>
-                <div className="flex items-center gap-3">
-                    <Avatar>
-                    <AvatarImage src={currentWinner.avatarUrl} data-ai-hint={currentWinner.avatarHint} />
-                    <AvatarFallback>{currentWinner.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <p className="font-semibold text-lg">{currentWinner.name}</p>
-                </div>
+                  <Trophy className={cn("w-12 h-12 text-amber-400 transition-transform duration-500", isDrawing && "animate-pulse scale-110")}/>
+                  <p className="text-sm text-muted-foreground">Yang Menarik Saat Ini</p>
+                  <div className="flex items-center gap-3">
+                      <Avatar>
+                      <AvatarImage src={currentWinner.avatarUrl} data-ai-hint={currentWinner.avatarHint} />
+                      <AvatarFallback>{currentWinner.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <p className="font-semibold text-lg">{currentWinner.name}</p>
+                  </div>
                 </>
             ) : (
-                <p className="text-muted-foreground">Belum ada yang menarik yang dipilih untuk grup ini.</p>
+                 <p className="text-muted-foreground">Belum ada yang menarik yang dipilih untuk grup ini.</p>
             )}
+        </CardContent>
+         <CardContent>
+          <p className="text-sm font-medium mb-2 text-center">Status Undian Anggota</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+            {groupMembers.map(member => (
+              <div key={member.id} className={cn("flex items-center gap-2 p-1 rounded", winnerIds.includes(member.id) ? "bg-green-500/10 text-green-700" : "bg-muted text-muted-foreground")}>
+                <Avatar className="h-5 w-5">
+                    <AvatarImage src={member.avatarUrl} data-ai-hint={member.avatarHint} />
+                    <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <span className="truncate">{member.name}</span>
+                {winnerIds.includes(member.id) && <CheckCircle2 className="h-4 w-4 ml-auto flex-shrink-0" />}
+              </div>
+            ))}
+          </div>
         </CardContent>
         <CardFooter>
           <Button className="w-full" onClick={handleDrawWinner} disabled={isDrawing || !group}>

@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowDownCircle, ArrowUpCircle, Banknote, UserCheck } from 'lucide-react';
-import { format, getMonth, getYear, subMonths, startOfMonth } from 'date-fns';
+import { format, getMonth, getYear, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
@@ -41,8 +41,6 @@ export function MonthlyReport() {
         const group = arisanData.groups.find(g => g.id === 'g1');
         if (!group) return { cashIn: 0, cashOut: 0, endingBalance: 0, winner: null, transactions: [] };
 
-        const targetMonthStart = startOfMonth(new Date(year, month));
-
         const transactions = arisanData.payments
             .filter(p => {
                 const paymentDueDate = new Date(p.dueDate);
@@ -55,34 +53,21 @@ export function MonthlyReport() {
 
         const cashIn = paidTransactions.reduce((sum, p) => sum + p.amount, 0);
         
-        // This is a simplification. In a real app, you would have a history of winners per month.
-        // We will simulate by picking one of the members as the winner for that month.
-        // For demonstration, let's find a "winner" for the selected month.
-        // Here we'll just use the currentWinnerId for the most recent month, and cycle for past months.
-        const currentMonthValue = `${getYear(new Date())}-${getMonth(new Date())}`;
-        let winner = null;
-        let cashOut = 0;
+        const monthString = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const winnerEntry = group.winnerHistory?.find(wh => wh.month.startsWith(`${year}-${month + 1}`) || wh.month === `${year}-${String(month + 1).padStart(2, '0')}`);
         
-        if (selectedMonth === currentMonthValue && group.currentWinnerId) {
-             winner = arisanData.members.find(m => m.id === group.currentWinnerId);
-        } else {
-             // For past months, let's just pick a member based on the month to simulate a winner history.
-             // This is not a real-world scenario but good for demo.
-             const memberIndex = month % group.memberIds.length;
-             const winnerId = group.memberIds[memberIndex];
-             winner = arisanData.members.find(m => m.id === winnerId);
+        let winner = null;
+        if (winnerEntry) {
+            winner = arisanData.members.find(m => m.id === winnerEntry.memberId);
         }
-
-        if (winner) {
-            cashOut = group.contributionAmount * group.memberIds.length;
-        }
+        
+        const cashOut = winner ? group.contributionAmount * group.memberIds.length : 0;
 
         const endingBalance = cashIn - cashOut;
 
         const detailedTransactions = paidTransactions
             .map(p => {
                 const member = arisanData.members.find(m => m.id === p.memberId);
-                // We'll find a paid payment entry to get a date, falling back to due date.
                 const paymentHistoryEntry = member?.paymentHistory.find(ph => {
                     const phDate = new Date(ph.date);
                     return getYear(phDate) === year && getMonth(phDate) === month;

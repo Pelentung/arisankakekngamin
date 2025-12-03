@@ -21,6 +21,7 @@ export interface Group {
   cycle: 'monthly' | 'weekly';
   memberIds: string[];
   currentWinnerId?: string;
+  winnerHistory?: { month: string; memberId: string }[];
 }
 
 export interface Payment {
@@ -112,6 +113,7 @@ export const arisanData: {
       cycle: 'monthly',
       memberIds: ['m1', 'm2', 'm3', 'm4', 'm5'],
       currentWinnerId: 'm2',
+      winnerHistory: [{ month: '2024-07', memberId: 'm2' }],
     },
     {
       id: 'g2',
@@ -119,6 +121,7 @@ export const arisanData: {
       contributionAmount: 10000,
       cycle: 'weekly',
       memberIds: ['m1', 'm3', 'm5'],
+      winnerHistory: [],
     },
     {
         id: 'g3',
@@ -126,6 +129,7 @@ export const arisanData: {
         contributionAmount: 50000,
         cycle: 'monthly',
         memberIds: ['m1', 'm2', 'm4'],
+        winnerHistory: [],
       },
   ],
   payments: [
