@@ -168,6 +168,17 @@ export default function PaymentPage() {
   }, [contributionSettings]);
 
   const calculatePaymentDetails = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number, contributions: DetailedPayment['contributions'] } => {
+    if (payment.groupId !== 'g3') {
+        // For non-main groups, total amount is fixed. Status depends on whether all contributions are paid.
+        const allPaid = Object.values(payment.contributions).every(c => c.paid);
+        return {
+            status: allPaid ? 'Paid' : 'Unpaid',
+            totalAmount: payment.totalAmount, // This is the group's fixed contributionAmount
+            contributions: payment.contributions
+        };
+    }
+    
+    // For the main group, calculate everything dynamically based on settings
     const updatedContributions: DetailedPayment['contributions'] = {
         main: { ...payment.contributions.main, amount: contributionSettings.main },
         cash: { ...payment.contributions.cash, amount: contributionSettings.cash },
@@ -210,14 +221,12 @@ export default function PaymentPage() {
             [contributionType]: { ...p.contributions[contributionType], paid: isPaid },
           };
 
-          const newP: DetailedPayment = { ...p, contributions: updatedContributions };
-          
           // Recalculate status based on the new paid status of individual contributions
-          const { status } = calculatePaymentDetails(newP);
-          newP.status = status;
+          const { status } = calculatePaymentDetails({ ...p, contributions: updatedContributions });
           
           const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
           const contributionLabel = contributionLabels[contributionType];
+          
           if (contributionLabel) {
             toast({
               title: 'Status Iuran Diperbarui',
@@ -225,7 +234,7 @@ export default function PaymentPage() {
             });
           }
           
-          return newP;
+          return { ...p, contributions: updatedContributions, status };
         }
         return p;
       })
@@ -238,9 +247,10 @@ export default function PaymentPage() {
             const allPaid = newStatus === 'Paid';
             const updatedContributions = { ...p.contributions };
             
+            // Mark all underlying contributions as paid or unpaid
             for (const key in updatedContributions) {
                 const type = key as ContributionType;
-                if(updatedContributions[type] && updatedContributions[type].amount > 0) {
+                if(updatedContributions[type]) { // Check if contribution exists
                     updatedContributions[type].paid = allPaid;
                 }
             }
@@ -261,18 +271,15 @@ export default function PaymentPage() {
     return payments
       .filter(p => p.groupId === selectedGroup)
       .map(p => {
-          let updatedPayment = { ...p, member: arisanData.members.find(m => m.id === p.memberId) };
-          if (p.groupId === 'g3') { // Only for 'Grup Arisan Utama'
-              const { status, totalAmount, contributions } = calculatePaymentDetails(p);
-              updatedPayment.status = status;
-              updatedPayment.totalAmount = totalAmount;
-              updatedPayment.contributions = contributions;
-          } else {
-              const { status, totalAmount } = calculatePaymentDetails(p); // Still need to calculate total for simple view
-              updatedPayment.status = status;
-              updatedPayment.totalAmount = p.totalAmount; // Keep original total amount for simple groups
-          }
-          return updatedPayment;
+          const member = arisanData.members.find(m => m.id === p.memberId);
+          const { status, totalAmount, contributions } = calculatePaymentDetails(p);
+          return {
+              ...p,
+              member,
+              status,
+              totalAmount,
+              contributions
+          };
       });
   }, [payments, selectedGroup, calculatePaymentDetails]);
 
@@ -333,3 +340,5 @@ export default function PaymentPage() {
     </div>
   );
 }
+
+    
