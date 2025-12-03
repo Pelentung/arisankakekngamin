@@ -2,6 +2,7 @@ import { Header } from '@/components/layout/header';
 import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { GroupsList } from '@/components/dashboard/groups-list';
 import { PaymentOverview } from '@/components/dashboard/payment-overview';
+import { WinnerHistory } from '@/components/dashboard/winner-history';
 
 export default function Home() {
   return (
@@ -22,6 +23,8 @@ export default function Home() {
             <GroupsList />
           </div>
         </div>
+
+        <WinnerHistory />
       </main>
     </div>
   );
