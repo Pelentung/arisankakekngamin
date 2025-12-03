@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Coins, LayoutDashboard, Settings, Trophy, Users, FileText, Receipt } from 'lucide-react';
+import { Coins, LayoutDashboard, Settings, Trophy, Users, FileText, Receipt, StickyNote } from 'lucide-react';
 
 import {
   SidebarHeader,
@@ -23,6 +23,7 @@ const navItems = [
   { href: '/pembayaran', label: 'Pembayaran', icon: Coins },
   { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
   { href: '/undian', label: 'Undian Tarikan', icon: Trophy },
+  { href: '/catatan', label: 'Catatan', icon: StickyNote },
 ];
 
 export function SidebarNav() {

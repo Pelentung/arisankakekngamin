@@ -43,11 +43,21 @@ export interface Expense {
     category: 'Sakit' | 'Kemalangan' | 'Lainnya';
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export const arisanData: {
   members: Member[];
   groups: Group[];
   payments: Payment[];
   expenses: Expense[];
+  notes: Note[];
 } = {
   members: [
     {
@@ -167,5 +177,10 @@ export const arisanData: {
     { id: 'e1', date: '2024-07-20', description: 'Bantuan untuk Budi (sakit)', amount: 50000, category: 'Sakit' },
     { id: 'e2', date: '2024-07-22', description: 'Sumbangan duka cita keluarga Siti', amount: 100000, category: 'Kemalangan' },
     { id: 'e3', date: '2024-07-25', description: 'Biaya fotokopi & administrasi', amount: 15000, category: 'Lainnya' },
+  ],
+  notes: [
+    { id: 'n1', title: 'Rencana Rapat Anggota', content: 'Rapat anggota berikutnya akan diadakan pada akhir bulan untuk membahas perubahan iuran.', createdAt: '2024-07-28T10:00:00Z', updatedAt: '2024-07-28T10:00:00Z' },
+    { id: 'n2', title: 'Ide Acara Halal Bihalal', content: 'Mengumpulkan ide untuk acara halal bihalal keluarga besar. Beberapa usulan: outbound, makan bersama di restoran, atau pengajian.', createdAt: '2024-07-25T14:30:00Z', updatedAt: '2024-07-26T09:00:00Z' },
+    { id: 'n3', title: 'Daftar Kontak Penting', content: 'Ketua: Budi Santoso (0812...), Bendahara: Siti Aminah (0813...)', createdAt: '2024-07-20T08:00:00Z', updatedAt: '2024-07-20T08:00:00Z' }
   ]
 };
