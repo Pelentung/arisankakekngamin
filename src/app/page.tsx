@@ -11,8 +11,8 @@ export default function Home() {
       <Header title="Menu Utama" />
       <main className="flex-1 p-4 md:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
-            Manajemen Keuangan Arisan Keluarga Besar Alm. Kakek Ngamin
+            <h1 className="font-headline text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-blue-500 sm:text-3xl">
+            ARISAN KELUARGA BESAR Alm. KAKEKNGAMIN
             </h1>
             <RealTimeClock />
         </div>
