@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarContent,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Separator } from '../ui/separator';
 
@@ -25,6 +26,7 @@ const navItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
 
   return (
     <>
@@ -44,6 +46,7 @@ export function SidebarNav() {
                 asChild
                 isActive={pathname === item.href && item.href !=='#'}
                 tooltip={item.label}
+                onClick={() => setOpenMobile(false)}
               >
                 <Link href={item.href}>
                   <item.icon />
