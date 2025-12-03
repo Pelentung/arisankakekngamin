@@ -163,7 +163,7 @@ export default function PaymentPage() {
     for (const key in contributions) {
       const type = key as ContributionType;
       totalAmount += contributions[type].amount;
-      if (!contributions[type].paid) {
+      if (contributions[type].amount > 0 && !contributions[type].paid) {
         allPaid = false;
       }
     }
@@ -193,10 +193,9 @@ export default function PaymentPage() {
 
           const newP: DetailedPayment = { ...p, contributions: updatedContributions };
           
-          const { status, totalAmount } = calculatePaymentStatus(newP);
+          const { status } = calculatePaymentStatus(newP);
           newP.status = status;
-          newP.totalAmount = totalAmount; // This is a recalculation, should be fine.
-
+          
           const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
           if (contributionLabels[contributionType]) {
             toast({
@@ -224,7 +223,7 @@ export default function PaymentPage() {
                     updatedContributions[type].paid = allPaid;
                 }
             }
-
+            
             const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
             toast({
               title: 'Status Pembayaran Diperbarui',
@@ -240,11 +239,16 @@ export default function PaymentPage() {
   const filteredPayments = useMemo(() => {
     return payments
       .filter(p => p.groupId === selectedGroup)
-      .map(p => ({
-        ...p,
-        member: arisanData.members.find(m => m.id === p.memberId),
-      }));
-  }, [payments, selectedGroup]);
+      .map(p => {
+        const { status, totalAmount } = calculatePaymentStatus(p);
+        return {
+          ...p,
+          status,
+          totalAmount,
+          member: arisanData.members.find(m => m.id === p.memberId),
+        }
+      });
+  }, [payments, selectedGroup, calculatePaymentStatus]);
 
 
   const saveAllChanges = () => {
@@ -303,5 +307,3 @@ export default function PaymentPage() {
     </div>
   );
 }
-
-    
