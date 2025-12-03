@@ -67,7 +67,7 @@ export default function ManageGroupsPage() {
       <main className="flex-1 p-4 md:p-6 space-y-6">
         <div className="flex items-center justify-between">
             <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
-                Arisan Uang Kaget
+                Grup Arisan Utama
             </h1>
             <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
