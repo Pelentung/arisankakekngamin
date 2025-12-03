@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { PlusCircle, Trash, Edit } from 'lucide-react';
+import { PlusCircle, Trash, Edit, Upload } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -99,7 +99,19 @@ const AddMemberToGroupDialog = ({
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = () => {
     if (!name || !address || !phone || !selectedGroupId) {
@@ -111,7 +123,6 @@ const AddMemberToGroupDialog = ({
       return;
     }
 
-    // This is a mock update. In a real app, you'd update your data source.
     const group = arisanData.groups.find(g => g.id === selectedGroupId);
     
     if (group) {
@@ -122,16 +133,14 @@ const AddMemberToGroupDialog = ({
             address,
             phone,
             joinedDate: format(new Date(), 'yyyy-MM-dd'),
-            avatarUrl: `https://picsum.photos/seed/${name}/100/100`,
+            avatarUrl: photoPreview || `https://picsum.photos/seed/${name}/100/100`,
             avatarHint: 'person portrait',
             paymentHistory: [],
             communicationPreferences: { channel: 'WhatsApp', preferredTime: 'any' },
         };
 
-        // Add new member to master list
         arisanData.members.push(newMember);
 
-        // Add member to selected group
         if (group.memberIds.includes(newMember.id)) {
             toast({
               title: 'Gagal Menambahkan',
@@ -154,6 +163,7 @@ const AddMemberToGroupDialog = ({
     setAddress('');
     setPhone('');
     setSelectedGroupId('');
+    setPhotoPreview(null);
   };
 
 
@@ -184,6 +194,18 @@ const AddMemberToGroupDialog = ({
               Nomor HP
             </Label>
             <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="col-span-3" placeholder="Nomor telepon aktif"/>
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="photo" className="text-right">
+              Foto
+            </Label>
+            <div className="col-span-3 flex items-center gap-3">
+              <Avatar className="h-12 w-12">
+                  <AvatarImage src={photoPreview || undefined} />
+                  <AvatarFallback><Upload className="h-5 w-5"/></AvatarFallback>
+              </Avatar>
+              <Input id="photo" type="file" onChange={handlePhotoChange} className="w-auto flex-1" accept="image/*" />
+            </div>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="group" className="text-right">
