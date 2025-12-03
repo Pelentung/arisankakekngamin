@@ -33,10 +33,19 @@ export interface Payment {
   status: 'Paid' | 'Unpaid' | 'Late';
 }
 
+export interface Expense {
+    id: string;
+    date: string;
+    description: string;
+    amount: number;
+    category: 'Sakit' | 'Kemalangan' | 'Lainnya';
+}
+
 export const arisanData: {
   members: Member[];
   groups: Group[];
   payments: Payment[];
+  expenses: Expense[];
 } = {
   members: [
     {
@@ -142,4 +151,9 @@ export const arisanData: {
     { id: 'p7', memberId: 'm3', groupId: 'g2', amount: 10000, dueDate: '2024-08-15', status: 'Unpaid' },
     { id: 'p8', memberId: 'm5', groupId: 'g2', amount: 10000, dueDate: '2024-08-15', status: 'Paid' },
   ],
+  expenses: [
+    { id: 'e1', date: '2024-07-20', description: 'Bantuan untuk Budi (sakit)', amount: 50000, category: 'Sakit' },
+    { id: 'e2', date: '2024-07-22', description: 'Sumbangan duka cita keluarga Siti', amount: 100000, category: 'Kemalangan' },
+    { id: 'e3', date: '2024-07-25', description: 'Biaya fotokopi & administrasi', amount: 15000, category: 'Lainnya' },
+  ]
 };
