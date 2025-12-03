@@ -38,16 +38,26 @@ import {
     DropdownMenuTrigger,
   } from "@/components/ui/dropdown-menu"
 
+const today = new Date();
+today.setHours(0, 0, 0, 0); // Set time to beginning of day for accurate comparison
+
 const memberDetails = arisanData.payments
   .filter(p => p.groupId === 'g3')
   .map((payment) => {
     const member = arisanData.members.find((m) => m.id === payment.memberId);
+    let currentStatus = payment.status;
+
+    // Automatically mark as 'Late' if unpaid and past due date
+    if (currentStatus === 'Unpaid' && new Date(payment.dueDate) < today) {
+        currentStatus = 'Late';
+    }
+
     const statusMapping = {
       'Paid': 'Lunas',
       'Unpaid': 'Belum Lunas',
       'Late': 'Terlambat',
     }
-    return { ...payment, member, status: statusMapping[payment.status] as 'Lunas' | 'Belum Lunas' | 'Terlambat' };
+    return { ...payment, member, status: statusMapping[currentStatus] as 'Lunas' | 'Belum Lunas' | 'Terlambat' };
 });
 
 export function PaymentOverview() {
@@ -97,7 +107,10 @@ export function PaymentOverview() {
                           ? 'secondary'
                           : 'destructive'
                       }
-                      className={detail.status === 'Lunas' ? 'bg-green-500/20 text-green-400 border-green-500/20' : ''}
+                      className={
+                        detail.status === 'Lunas' ? 'bg-green-500/20 text-green-400 border-green-500/20' : 
+                        detail.status === 'Terlambat' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/20' : ''
+                      }
                     >
                       {detail.status}
                     </Badge>
