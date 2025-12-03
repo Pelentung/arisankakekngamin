@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { arisanData, type DetailedPayment, type Member, type Group } from '@/app/data';
+import { arisanData, type DetailedPayment, type Member, type Group, type ContributionSettings } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -26,15 +27,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 type PaymentDetail = DetailedPayment & { member?: Member };
-type ContributionType = keyof DetailedPayment['contributions'];
+type ContributionType = keyof Omit<ContributionSettings, 'others'> | string;
 
-const contributionLabels: Record<ContributionType, string> = {
-  main: 'Iuran Utama',
-  cash: 'Iuran Kas',
-  sick: 'Iuran Sakit',
-  bereavement: 'Iuran Kemalangan',
-  other: 'Iuran Lainnya',
-};
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -44,7 +38,7 @@ const formatCurrency = (amount: number) =>
   }).format(amount);
 
 // --- Detailed Table for Main Group ---
-const DetailedPaymentTable = ({ payments, onPaymentChange }: { payments: PaymentDetail[], onPaymentChange: (paymentId: string, contributionType: ContributionType, isPaid: boolean) => void }) => {
+const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: PaymentDetail[], onPaymentChange: (paymentId: string, contributionType: ContributionType, isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
   return (
     <div className='overflow-x-auto'>
       <Table className="min-w-[1000px]">
@@ -52,8 +46,8 @@ const DetailedPaymentTable = ({ payments, onPaymentChange }: { payments: Payment
           <TableRow>
             <TableHead className='sticky left-0 bg-card z-10 w-[200px]'>Nama</TableHead>
             <TableHead>Bulan</TableHead>
-            {(Object.keys(contributionLabels) as ContributionType[]).map(key => (
-              contributionLabels[key] && <TableHead key={key}>{contributionLabels[key]}</TableHead>
+            {Object.keys(contributionLabels).map(key => (
+              <TableHead key={key}>{contributionLabels[key]}</TableHead>
             ))}
             <TableHead className="text-right">Jumlah</TableHead>
           </TableRow>
@@ -75,23 +69,27 @@ const DetailedPaymentTable = ({ payments, onPaymentChange }: { payments: Payment
               <TableCell>
                 {new Date(payment.dueDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
               </TableCell>
-              {(Object.keys(payment.contributions) as ContributionType[]).map(type => (
-                payment.contributions[type].amount > 0 && (
-                  <TableCell key={type}>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`paid-${payment.id}-${type}`}
-                        checked={payment.contributions[type].paid}
-                        onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
-                        aria-label={`Tandai ${contributionLabels[type]} untuk ${payment.member?.name} lunas`}
-                      />
-                      <label htmlFor={`paid-${payment.id}-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        {formatCurrency(payment.contributions[type].amount)}
-                      </label>
-                    </div>
-                  </TableCell>
-                )
-              ))}
+              {Object.keys(payment.contributions).map(type => {
+                const contribution = payment.contributions[type];
+                 if (contribution && contribution.amount > 0 && contributionLabels[type]) {
+                    return (
+                        <TableCell key={type}>
+                            <div className="flex items-center gap-2">
+                            <Checkbox
+                                id={`paid-${payment.id}-${type}`}
+                                checked={contribution.paid}
+                                onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
+                                aria-label={`Tandai ${contributionLabels[type]} untuk ${payment.member?.name} lunas`}
+                            />
+                            <label htmlFor={`paid-${payment.id}-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                {formatCurrency(contribution.amount)}
+                            </label>
+                            </div>
+                        </TableCell>
+                    )
+                 }
+                 return null;
+              })}
               <TableCell className="text-right">
                 {formatCurrency(payment.totalAmount)}
               </TableCell>
@@ -154,6 +152,19 @@ export default function PaymentPage() {
   const [payments, setPayments] = useState<DetailedPayment[]>(arisanData.payments);
   const [selectedGroup, setSelectedGroup] = useState('g3'); // Default to 'Grup Arisan Utama'
 
+  const contributionLabels = useMemo(() => {
+    const labels: Record<string, string> = {
+        main: 'Iuran Utama',
+        cash: 'Iuran Kas',
+        sick: 'Iuran Sakit',
+        bereavement: 'Iuran Kemalangan',
+    };
+    arisanData.contributionSettings.others.forEach(other => {
+        labels[other.id] = other.description;
+    });
+    return labels;
+  }, []);
+
   const calculatePaymentStatus = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number } => {
     const { contributions } = payment;
     let allPaid = true;
@@ -161,9 +172,12 @@ export default function PaymentPage() {
 
     for (const key in contributions) {
       const type = key as ContributionType;
-      totalAmount += contributions[type].amount;
-      if (contributions[type].amount > 0 && !contributions[type].paid) {
-        allPaid = false;
+      const contribution = contributions[type];
+      if (contribution && contribution.amount) {
+        totalAmount += contribution.amount;
+        if (contribution.amount > 0 && !contribution.paid) {
+            allPaid = false;
+        }
       }
     }
 
@@ -210,7 +224,7 @@ export default function PaymentPage() {
             
             for (const key in updatedContributions) {
                 const type = key as ContributionType;
-                if(updatedContributions[type].amount > 0) {
+                if(updatedContributions[type] && updatedContributions[type].amount > 0) {
                     updatedContributions[type].paid = allPaid;
                 }
             }
@@ -283,7 +297,7 @@ export default function PaymentPage() {
           <CardContent>
             {filteredPayments.length > 0 ? (
                 selectedGroup === 'g3' ? (
-                    <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} />
+                    <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                 ) : (
                     <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
                 )
@@ -298,5 +312,3 @@ export default function PaymentPage() {
     </div>
   );
 }
-
-    
