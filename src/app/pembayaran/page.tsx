@@ -138,7 +138,6 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: PaymentDet
                             <SelectContent>
                                 <SelectItem value="Paid"><Badge variant="secondary" className="bg-green-500/20 text-green-400 border-green-500/20 w-full justify-center">Lunas</Badge></SelectItem>
                                 <SelectItem value="Unpaid"><Badge variant="destructive">Belum Lunas</Badge></SelectItem>
-                                <SelectItem value="Late"><Badge variant="destructive" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/20 w-full justify-center">Terlambat</Badge></SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>
@@ -156,7 +155,7 @@ export default function PaymentPage() {
   const [selectedGroup, setSelectedGroup] = useState('g3'); // Default to 'Grup Arisan Utama'
 
   const calculatePaymentStatus = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number } => {
-    const { contributions, dueDate } = payment;
+    const { contributions } = payment;
     let allPaid = true;
     let totalAmount = 0;
 
@@ -168,16 +167,7 @@ export default function PaymentPage() {
       }
     }
 
-    let status: DetailedPayment['status'] = 'Unpaid';
-    if (allPaid) {
-      status = 'Paid';
-    } else {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (new Date(dueDate) < today) {
-        status = 'Late';
-      }
-    }
+    const status: DetailedPayment['status'] = allPaid ? 'Paid' : 'Unpaid';
     
     return { status, totalAmount };
   }, []);
@@ -197,10 +187,11 @@ export default function PaymentPage() {
           newP.status = status;
           
           const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
-          if (contributionLabels[contributionType]) {
+          const contributionLabel = contributionLabels[contributionType];
+          if (contributionLabel) {
             toast({
               title: 'Status Iuran Diperbarui',
-              description: `${contributionLabels[type]} untuk ${memberName} ${isPaid ? 'sudah' : 'belum'} dibayar.`,
+              description: `${contributionLabel} untuk ${memberName} ${isPaid ? 'sudah' : 'belum'} dibayar.`,
             });
           }
           
@@ -227,7 +218,7 @@ export default function PaymentPage() {
             const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
             toast({
               title: 'Status Pembayaran Diperbarui',
-              description: `Status untuk ${memberName} diubah menjadi ${newStatus}.`,
+              description: `Status untuk ${memberName} diubah menjadi ${newStatus === 'Paid' ? 'Lunas' : 'Belum Lunas'}.`,
             });
 
             return { ...p, status: newStatus, contributions: updatedContributions };
@@ -307,3 +298,5 @@ export default function PaymentPage() {
     </div>
   );
 }
+
+    

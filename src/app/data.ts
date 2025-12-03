@@ -8,7 +8,7 @@ export interface Member {
   joinedDate: string;
   paymentHistory: {
     date: string;
-    status: 'Paid' | 'Late' | 'Unpaid';
+    status: 'Paid' | 'Unpaid';
   }[];
   communicationPreferences: {
     channel: 'email' | 'SMS' | 'WhatsApp';
@@ -39,7 +39,7 @@ export interface DetailedPayment {
     other: { amount: number; paid: boolean };
   };
   totalAmount: number; // This will be calculated
-  status: 'Paid' | 'Unpaid' | 'Late'; // This will be calculated
+  status: 'Paid' | 'Unpaid'; // This will be calculated
 }
 
 export interface Expense {
@@ -77,7 +77,7 @@ export const arisanData: {
       joinedDate: '2023-01-15',
       paymentHistory: [
         { date: '2024-05-10', status: 'Paid' },
-        { date: '2024-06-11', status: 'Late' },
+        { date: '2024-06-11', status: 'Unpaid' },
         { date: '2024-07-10', status: 'Paid' },
       ],
       communicationPreferences: { channel: 'WhatsApp', preferredTime: 'evening' },
@@ -108,7 +108,7 @@ export const arisanData: {
       paymentHistory: [
         { date: '2024-05-10', status: 'Paid' },
         { date: '2024-06-10', status: 'Paid' },
-        { date: '2024-07-12', status: 'Late' },
+        { date: '2024-07-12', status: 'Unpaid' },
       ],
       communicationPreferences: { channel: 'SMS', preferredTime: 'afternoon' },
     },
@@ -192,4 +192,5 @@ export const arisanData: {
   ]
 };
 
+    
     
