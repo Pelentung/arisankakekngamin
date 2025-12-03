@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Coins, LayoutDashboard, Settings, Trophy, Users, FileText, Receipt, StickyNote } from 'lucide-react';
+import { Coins, LayoutDashboard, Shield, Trophy, Users, FileText, Receipt, StickyNote } from 'lucide-react';
 
 import {
   SidebarHeader,
@@ -65,10 +65,10 @@ export function SidebarNav() {
         <Separator className="my-2" />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname === '/settings'} tooltip={'Pengaturan'}>
-              <Link href="#">
-                <Settings />
-                <span>Pengaturan</span>
+            <SidebarMenuButton asChild isActive={pathname === '/admin'} tooltip={'Admin'}>
+              <Link href="/admin">
+                <Shield />
+                <span>Admin</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

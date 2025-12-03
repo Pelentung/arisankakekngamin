@@ -58,6 +58,14 @@ export interface Note {
   updatedAt: string;
 }
 
+export interface ContributionSettings {
+    main: number;
+    cash: number;
+    sick: number;
+    bereavement: number;
+    other: number;
+}
+
 
 export const arisanData: {
   members: Member[];
@@ -65,6 +73,7 @@ export const arisanData: {
   payments: DetailedPayment[];
   expenses: Expense[];
   notes: Note[];
+  contributionSettings: ContributionSettings;
 } = {
   members: [
     {
@@ -189,7 +198,14 @@ export const arisanData: {
     { id: 'n1', title: 'Rencana Rapat Anggota', content: 'Rapat anggota berikutnya akan diadakan pada akhir bulan untuk membahas perubahan iuran.', createdAt: '2024-07-28T10:00:00Z', updatedAt: '2024-07-28T10:00:00Z' },
     { id: 'n2', title: 'Ide Acara Halal Bihalal', content: 'Mengumpulkan ide untuk acara halal bihalal keluarga besar. Beberapa usulan: outbound, makan bersama di restoran, atau pengajian.', createdAt: '2024-07-25T14:30:00Z', updatedAt: '2024-07-26T09:00:00Z' },
     { id: 'n3', title: 'Daftar Kontak Penting', content: 'Ketua: Budi Santoso (0812...), Bendahara: Siti Aminah (0813...)', createdAt: '2024-07-20T08:00:00Z', updatedAt: '2024-07-20T08:00:00Z' }
-  ]
+  ],
+  contributionSettings: {
+    main: 50000,
+    cash: 10000,
+    sick: 5000,
+    bereavement: 5000,
+    other: 0,
+  }
 };
 
     
