@@ -6,7 +6,7 @@ import { PaymentOverview } from '@/components/dashboard/payment-overview';
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="Dasbor" />
+      <Header title="Menu Utama" />
       <main className="flex-1 p-4 md:p-6 space-y-6">
         <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
           Manajemen Keuangan Arisan Keluarga Besar Alm. Kakek Ngamin
