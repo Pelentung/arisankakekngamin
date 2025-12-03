@@ -191,9 +191,9 @@ export default function ManageGroupsPage() {
   // Force re-render when data changes
   const [, setVersion] = useState(0); 
   
-  const group1 = arisanData.groups.find(g => g.id === 'g2'); // 10.000
+  const group1 = arisanData.groups.find(g => g.id === 'g3'); // Utama
   const group2 = arisanData.groups.find(g => g.id === 'g1'); // 20.000
-  const group3 = arisanData.groups.find(g => g.id === 'g3'); // Utama
+  const group3 = arisanData.groups.find(g => g.id === 'g2'); // 10.000
 
   const membersGroup1 = arisanData.members.filter(member =>
     group1?.memberIds.includes(member.id)
