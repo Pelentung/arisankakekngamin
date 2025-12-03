@@ -128,7 +128,7 @@ export const arisanData: {
       id: 'g2',
       name: 'Arisan Uang Kaget Rp. 10.000',
       contributionAmount: 10000,
-      cycle: 'weekly',
+      cycle: 'monthly',
       memberIds: ['m1', 'm3', 'm5'],
       winnerHistory: [],
     },
