@@ -142,7 +142,7 @@ export function MonthlyReport() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{formatCurrency(reportData.cashOut)}</div>
-                        <p className="text-xs text-muted-foreground">Pencairan untuk pemenang</p>
+                        <p className="text-xs text-muted-foreground">Pencairan untuk yang menarik</p>
                     </CardContent>
                 </Card>
                  <Card>
@@ -157,7 +157,7 @@ export function MonthlyReport() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pemenang Bulan Terpilih</CardTitle>
+                        <CardTitle className="text-sm font-medium">Yang Menarik Bulan Terpilih</CardTitle>
                         <UserCheck className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -172,7 +172,7 @@ export function MonthlyReport() {
                         ) : (
                             <p className="text-sm text-muted-foreground">Tidak ada data</p>
                         )}
-                         <p className="text-xs text-muted-foreground mt-2">Pemenang arisan siklus terpilih</p>
+                         <p className="text-xs text-muted-foreground mt-2">Penarik arisan siklus terpilih</p>
                     </CardContent>
                 </Card>
             </div>
