@@ -17,7 +17,7 @@ import { Separator } from '../ui/separator';
 const navItems = [
   { href: '/', label: 'Dasbor', icon: LayoutDashboard },
   { href: '/laporan', label: 'Laporan', icon: FileText },
-  { href: '#', label: 'Grup', icon: Users },
+  { href: '/grup', label: 'Grup', icon: Users },
   { href: '#', label: 'Pembayaran', icon: Coins },
   { href: '#', label: 'Pemenang', icon: Trophy },
 ];
