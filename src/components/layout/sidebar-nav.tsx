@@ -31,9 +31,15 @@ export function SidebarNav() {
   const { setOpenMobile } = useSidebar();
 
   const isNavItemActive = (href: string) => {
+    // Exact match for the homepage
     if (href === '/') {
       return pathname === '/';
     }
+    // Exact match for /grup to avoid conflict with /grup/anggota
+    if (href === '/grup') {
+        return pathname === '/grup';
+    }
+    // StartsWith for all other nested routes
     return pathname.startsWith(href);
   };
 
