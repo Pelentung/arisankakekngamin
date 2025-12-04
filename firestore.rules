@@ -1,35 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access for all collections for now
+    // Allow public read and write access for all collections for now
     // We will tighten these rules once we add authentication
-    match /arisanData/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-    match /members/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-     match /groups/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-     match /payments/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-     match /expenses/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-     match /notes/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-    match /contributionSettings/{docId} {
-      allow read: if true;
-      allow write: if false;
+    match /{collection}/{docId} {
+      allow read, write: if true;
     }
   }
 }
