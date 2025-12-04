@@ -136,6 +136,8 @@ const ExpenseDialog = ({
               <SelectContent>
                 <SelectItem value="Sakit">Anggota Sakit</SelectItem>
                 <SelectItem value="Kemalangan">Anggota Kemalangan</SelectItem>
+                <SelectItem value="Iuran Anggota">Iuran Anggota</SelectItem>
+                <SelectItem value="Talangan Kas">Talangan Kas</SelectItem>
                 <SelectItem value="Lainnya">Lainnya</SelectItem>
               </SelectContent>
             </Select>

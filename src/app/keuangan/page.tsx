@@ -211,7 +211,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
           <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="description" className="text-right">Deskripsi</Label><Textarea id="description" value={formData?.description || ''} onChange={handleChange} className="col-span-3" /></div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="category" className="text-right">Kategori</Label>
-            <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="Sakit">Anggota Sakit</SelectItem><SelectItem value="Kemalangan">Anggota Kemalangan</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select>
+            <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="Sakit">Anggota Sakit</SelectItem><SelectItem value="Kemalangan">Anggota Kemalangan</SelectItem><SelectItem value="Iuran Anggota">Iuran Anggota</SelectItem><SelectItem value="Talangan Kas">Talangan Kas</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="amount" className="text-right">Jumlah</Label><Input id="amount" type="number" value={formData?.amount || ''} onChange={handleAmountChange} className="col-span-3" placeholder="Contoh: 50000" /></div>
         </div>
@@ -554,4 +554,3 @@ export default function KeuanganPage() {
   );
 }
 
-    

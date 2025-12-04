@@ -247,6 +247,8 @@
           "enum": [
             "Sakit",
             "Kemalangan",
+            "Iuran Anggota",
+            "Talangan Kas",
             "Lainnya"
           ]
         }
@@ -377,5 +379,3 @@
     }
   }
 }
-
-    

@@ -52,7 +52,7 @@ export interface Expense {
     date: string;
     description: string;
     amount: number;
-    category: 'Sakit' | 'Kemalangan' | 'Lainnya';
+    category: 'Sakit' | 'Kemalangan' | 'Iuran Anggota' | 'Talangan Kas' | 'Lainnya';
 }
 
 export interface Note {
