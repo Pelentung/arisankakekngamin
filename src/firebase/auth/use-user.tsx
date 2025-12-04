@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { User as FirebaseAuthUser } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDocs, collection, query, limit } from 'firebase/firestore';
 
 export interface User extends FirebaseAuthUser {
   isAdmin?: boolean;
@@ -28,19 +28,23 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
-        // Listen for changes on the user document
+        
         const unsubSnapshot = onSnapshot(userRef, async (docSnap) => {
           if (docSnap.exists()) {
-            // User profile exists, merge it with auth data
             const userData = docSnap.data();
             setUser({ ...firebaseUser, ...userData });
+            setLoading(false);
           } else {
-            // User profile doesn't exist, create it (for new sign-ups)
+            // New user, check if they are the first user
+            const usersQuery = query(collection(db, 'users'), limit(1));
+            const existingUsers = await getDocs(usersQuery);
+            const isFirstUser = existingUsers.empty;
+
             const newUserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
-              isAdmin: false, // Default role
+              isAdmin: isFirstUser, // First user is admin
             };
             try {
               await setDoc(userRef, newUserProfile);
@@ -49,9 +53,13 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
               console.error("Error creating user profile:", error);
               setUser(firebaseUser); // Fallback to auth user
             }
+            setLoading(false);
           }
-          setLoading(false);
+        }, (error) => {
+            console.error("Error in user snapshot listener:", error);
+            setLoading(false);
         });
+
         return () => unsubSnapshot(); // Return snapshot listener cleanup
       } else {
         setUser(null);

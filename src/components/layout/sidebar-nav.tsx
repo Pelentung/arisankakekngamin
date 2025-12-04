@@ -13,7 +13,10 @@ import {
   Receipt,
   StickyNote,
   Wallet,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '@/firebase';
+import { useUser } from '@/firebase/auth/use-user';
 
 import {
   SidebarHeader,
@@ -25,33 +28,36 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Separator } from '../ui/separator';
+import { Button } from '../ui/button';
 
-const navItems = [
-  { href: '/', label: 'Menu Utama', icon: LayoutDashboard },
-  { href: '/laporan', label: 'Laporan', icon: FileText },
-  { href: '/keuangan', label: 'Pengelolaan Keuangan', icon: Wallet },
-  { href: '/grup', label: 'Kelola Grup & Anggota', icon: Users },
-  { href: '/pembayaran', label: 'Pembayaran', icon: Coins },
-  { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
-  { href: '/undian', label: 'Yang Sudah Narik', icon: Trophy },
-  { href: '/catatan', label: 'Catatan', icon: StickyNote },
+const allNavItems = [
+  { href: '/', label: 'Menu Utama', icon: LayoutDashboard, adminOnly: false },
+  { href: '/laporan', label: 'Laporan', icon: FileText, adminOnly: false },
+  { href: '/keuangan', label: 'Pengelolaan Keuangan', icon: Wallet, adminOnly: true },
+  { href: '/grup', label: 'Kelola Grup & Anggota', icon: Users, adminOnly: true },
+  { href: '/pembayaran', label: 'Pembayaran', icon: Coins, adminOnly: true },
+  { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt, adminOnly: true },
+  { href: '/undian', label: 'Yang Sudah Narik', icon: Trophy, adminOnly: true },
+  { href: '/catatan', label: 'Catatan', icon: StickyNote, adminOnly: true },
 ];
 
 export function SidebarNav() {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
+  const auth = useAuth();
+  const { user } = useUser();
+
+  const navItems = allNavItems.filter(item => !item.adminOnly || user?.isAdmin);
 
   const isNavItemActive = (href: string) => {
-    // Exact match for the homepage
-    if (href === '/') {
-      return pathname === '/';
-    }
-     if (href === '/grup') {
-        return pathname === '/grup';
-    }
-    // StartsWith for all other nested routes
+    if (href === '/') return pathname === '/';
+    if (href === '/grup') return pathname === '/grup';
     return pathname.startsWith(href);
   };
+
+  if (!user) {
+    return null; // Don't render sidebar if user is not logged in
+  }
 
   return (
     <>
@@ -86,20 +92,26 @@ export function SidebarNav() {
       </SidebarContent>
       <SidebarFooter className="p-2">
         <Separator className="my-2" />
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === '/admin'}
-              tooltip={'Ketetapan Iuran'}
-            >
-              <Link href="/admin">
-                <Shield />
-                <span>Ketetapan Iuran</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        {user?.isAdmin && (
+            <SidebarMenu>
+            <SidebarMenuItem>
+                <SidebarMenuButton
+                asChild
+                isActive={pathname === '/admin'}
+                tooltip={'Ketetapan Iuran'}
+                >
+                <Link href="/admin">
+                    <Shield />
+                    <span>Ketetapan Iuran</span>
+                </Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+            </SidebarMenu>
+        )}
+        <Button variant="ghost" className="w-full justify-start" onClick={() => auth.signOut()}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Keluar
+        </Button>
       </SidebarFooter>
     </>
   );

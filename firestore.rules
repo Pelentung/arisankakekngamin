@@ -3,11 +3,70 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // This rule allows anyone to read and write to any document in your database.
-    // This is useful for prototyping, but it is not secure.
-    // Make sure to secure your database before deploying to production.
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Rules for users collection
+    match /users/{userId} {
+      // Anyone can create their own user profile upon signup
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.isAdmin == false;
+      // Users can only read their own profile, admins can read any
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      // Users can update their own profile (except isAdmin field), admins can update any
+      allow update: if isSignedIn() && ((isOwner(userId) && !("isAdmin" in request.resource.data)) || isAdmin());
+      // Admins can delete users
+      allow delete: if isAdmin();
+    }
+    
+    // Admins have full access to all other collections
+    match /arisanData/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /members/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /groups/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /payments/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /expenses/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /notes/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /contributionSettings/{docId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Authenticated users (non-admins) have read-only access to some collections
+    match /members/{memberId} {
+        allow get, list: if isSignedIn();
+    }
+    match /groups/{groupId} {
+        allow get, list: if isSignedIn();
+    }
+    match /payments/{paymentId} {
+        allow get, list: if isSignedIn();
+    }
+     match /expenses/{expenseId} {
+        allow get, list: if isSignedIn();
+    }
+    match /contributionSettings/{settingId} {
+        allow get, list: if isSignedIn();
     }
   }
 }
