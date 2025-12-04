@@ -13,41 +13,47 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Users can create and update their own profile.
-      // Admins can read/write any user profile.
-      allow read, write: if isUser(userId) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Any signed-in user can create their own user profile document.
+      allow create: if isUser(userId);
+      
+      // Users can only read/update their own profile. Admins can read/update any profile.
+      allow get, update: if isUser(userId) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      
+      // Admins can delete any user profile.
+      allow delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
       // All signed-in users can list other user profiles (e.g., for selection dropdowns).
       allow list: if isSignedIn();
     }
 
     match /groups/{groupId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
 
     match /members/{memberId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
 
     match /payments/{paymentId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
 
     match /expenses/{expenseId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
 
     match /contributionSettings/{settingId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
 
     match /notes/{noteId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-      allow get, list: if isSignedIn();
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read: if isSignedIn();
     }
   }
 }
