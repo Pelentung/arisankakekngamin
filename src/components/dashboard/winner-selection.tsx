@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { arisanData, Member } from '@/app/data';
+import { subscribeToData, Member, Group } from '@/app/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,29 +22,45 @@ import {
 import { Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore } from '@/firebase';
 
 export function WinnerSelection() {
   const { toast } = useToast();
+  const db = useFirestore();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const [currentWinner, setCurrentWinner] = useState<Member | undefined>(undefined);
   const [drawnWinner, setDrawnWinner] = useState<Member | undefined>(undefined);
 
-  const mainGroup = arisanData.groups.find(g => g.id === 'g1');
+  const mainGroup = groups.find(g => g.id === 'g1');
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => setGroups(data as Group[]));
+    return () => {
+      unsubMembers();
+      unsubGroups();
+    };
+  }, [db]);
 
   useEffect(() => {
     if (mainGroup?.currentWinnerId) {
-      const winner = arisanData.members.find(
+      const winner = members.find(
         (m) => m.id === mainGroup.currentWinnerId
       );
       setCurrentWinner(winner);
+    } else {
+        setCurrentWinner(undefined);
     }
-  }, [mainGroup]);
+  }, [mainGroup, members]);
 
   const handleDrawWinner = () => {
     if (!mainGroup) return;
 
-    const eligibleMembers = arisanData.members.filter(m => mainGroup.memberIds.includes(m.id) && m.id !== currentWinner?.id);
+    const eligibleMembers = members.filter(m => mainGroup.memberIds.includes(m.id) && m.id !== currentWinner?.id);
     if (eligibleMembers.length === 0) {
         toast({
             title: "Undian Gagal",

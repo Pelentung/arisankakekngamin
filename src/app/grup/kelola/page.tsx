@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { arisanData, type Group, type Member } from '@/app/data';
+import React, { useState, useEffect } from 'react';
+import { type Group, type Member, subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -30,13 +30,22 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 const GroupManagementCard = ({
   group,
   members,
+  onRemoveMember,
+  onEditMember
 }: {
   group: Group;
   members: Member[];
+  onRemoveMember: (groupId: string, memberId: string) => void;
+  onEditMember: (member: Member) => void;
 }) => {
   return (
     <Card>
@@ -63,7 +72,7 @@ const GroupManagementCard = ({
               <span className="font-medium">{member.name}</span>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => onEditMember(member)}>
                 <Edit className="h-4 w-4" />
                 <span className="sr-only">Ubah</span>
               </Button>
@@ -71,6 +80,7 @@ const GroupManagementCard = ({
                 variant="ghost"
                 size="icon"
                 className="text-destructive hover:text-destructive"
+                onClick={() => onRemoveMember(group.id, member.id)}
               >
                 <Trash className="h-4 w-4" />
                 <span className="sr-only">Hapus</span>
@@ -78,6 +88,9 @@ const GroupManagementCard = ({
             </div>
           </div>
         ))}
+         {members.length === 0 && (
+            <p className="text-sm text-center text-muted-foreground py-4">Belum ada anggota.</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -88,11 +101,13 @@ const AddMemberToGroupDialog = ({
   onClose,
   groups,
   allMembers,
+  onAdd
 }: {
   isOpen: boolean;
   onClose: () => void;
   groups: Group[];
   allMembers: Member[];
+  onAdd: (groupId: string, memberId: string) => void;
 }) => {
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -108,9 +123,8 @@ const AddMemberToGroupDialog = ({
       return;
     }
 
-    // This is a mock update. In a real app, you'd update your data source.
-    const group = arisanData.groups.find(g => g.id === selectedGroupId);
-    const member = arisanData.members.find(m => m.id === selectedMemberId);
+    const group = groups.find(g => g.id === selectedGroupId);
+    const member = allMembers.find(m => m.id === selectedMemberId);
 
     if (group && member) {
       if (group.memberIds.includes(member.id)) {
@@ -120,11 +134,7 @@ const AddMemberToGroupDialog = ({
           variant: 'destructive',
         });
       } else {
-        group.memberIds.push(member.id);
-        toast({
-          title: 'Anggota Ditambahkan',
-          description: `${member.name} telah berhasil ditambahkan ke ${group.name}.`,
-        });
+        onAdd(group.id, member.id);
         onClose();
       }
     }
@@ -188,22 +198,73 @@ const AddMemberToGroupDialog = ({
 
 export default function ManageGroupsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // Force re-render when data changes
-  const [, setVersion] = useState(0); 
-  
-  const group1 = arisanData.groups.find(g => g.id === 'g3'); // Utama
-  const group2 = arisanData.groups.find(g => g.id === 'g1'); // 20.000
-  const group3 = arisanData.groups.find(g => g.id === 'g2'); // 10.000
+  const { toast } = useToast();
+  const db = useFirestore();
 
-  const membersGroup1 = arisanData.members.filter(member =>
-    group1?.memberIds.includes(member.id)
-  );
-  const membersGroup2 = arisanData.members.filter(member =>
-    group2?.memberIds.includes(member.id)
-  );
-  const membersGroup3 = arisanData.members.filter(member =>
-    group3?.memberIds.includes(member.id)
-  );
+  const [members, setMembers] = useState<Member[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  
+  useEffect(() => {
+    if (!db) return;
+    const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => setGroups(data as Group[]));
+
+    return () => {
+      unsubMembers();
+      unsubGroups();
+    };
+  }, [db]);
+
+
+  const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
+    if (!db) return;
+    const groupRef = doc(db, 'groups', groupId);
+    updateDoc(groupRef, {
+        memberIds: arrayUnion(memberId)
+    })
+    .then(() => {
+        const member = members.find(m => m.id === memberId);
+        const group = groups.find(g => g.id === groupId);
+        toast({
+          title: 'Anggota Ditambahkan',
+          description: `${member?.name} telah berhasil ditambahkan ke ${group?.name}.`,
+        });
+    })
+    .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: groupRef.path,
+            operation: 'update',
+            requestResourceData: { memberIds: arrayUnion(memberId) },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
+  }
+
+  const handleRemoveMemberFromGroup = async (groupId: string, memberId: string) => {
+      if (!db) return;
+      const groupRef = doc(db, 'groups', groupId);
+      updateDoc(groupRef, {
+          memberIds: arrayRemove(memberId)
+      })
+      .then(() => {
+          toast({
+              title: "Anggota Dihapus dari Grup",
+              description: "Anggota telah dikeluarkan dari grup ini."
+          });
+      })
+      .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+              path: groupRef.path,
+              operation: 'update',
+              requestResourceData: { memberIds: arrayRemove(memberId) },
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
+  }
+
+  const getGroupMembers = (group: Group) => {
+    return members.filter(member => group.memberIds.includes(member.id));
+  }
 
   return (
     <>
@@ -221,20 +282,24 @@ export default function ManageGroupsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {group1 && <GroupManagementCard group={group1} members={membersGroup1} />}
-            {group2 && <GroupManagementCard group={group2} members={membersGroup2} />}
-            {group3 && <GroupManagementCard group={group3} members={membersGroup3} />}
+            {groups.map(group => (
+              <GroupManagementCard 
+                key={group.id} 
+                group={group} 
+                members={getGroupMembers(group)}
+                onRemoveMember={handleRemoveMemberFromGroup}
+                onEditMember={(member) => console.log('Edit member', member)} // Placeholder
+              />
+            ))}
           </div>
         </main>
       </div>
       <AddMemberToGroupDialog
         isOpen={isDialogOpen}
-        onClose={() => {
-          setIsDialogOpen(false);
-          setVersion(v => v + 1); // Trigger re-render
-        }}
-        groups={arisanData.groups}
-        allMembers={arisanData.members}
+        onClose={() => setIsDialogOpen(false)}
+        groups={groups}
+        allMembers={members}
+        onAdd={handleAddMemberToGroup}
       />
     </>
   );
