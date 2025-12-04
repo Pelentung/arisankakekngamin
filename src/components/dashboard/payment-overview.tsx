@@ -1,7 +1,9 @@
+
 'use client';
 
-import { useState } from 'react';
-import { arisanData, type Member } from '@/app/data';
+import { useState, useEffect, useMemo } from 'react';
+import type { Member, DetailedPayment } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,21 +39,39 @@ import {
     DropdownMenuLabel,
     DropdownMenuTrigger,
   } from "@/components/ui/dropdown-menu"
+import { useFirestore } from '@/firebase';
 
-const memberDetails = arisanData.payments
-  .filter(p => p.groupId === 'g3')
-  .map((payment) => {
-    const member = arisanData.members.find((m) => m.id === payment.memberId);
-    
-    const statusMapping = {
-      'Paid': 'Lunas',
-      'Unpaid': 'Belum Lunas',
-    }
-    return { ...payment, member, status: statusMapping[payment.status] as 'Lunas' | 'Belum Lunas' };
-});
 
 export function PaymentOverview() {
+  const db = useFirestore();
+  const [payments, setPayments] = useState<DetailedPayment[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubPayments = subscribeToData(db, 'payments', (data) => setPayments(data as DetailedPayment[]));
+    const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    return () => {
+        unsubPayments();
+        unsubMembers();
+    }
+  }, [db]);
+
+  const memberDetails = useMemo(() => {
+    return payments
+        .filter(p => p.groupId === 'g3')
+        .map((payment) => {
+            const member = members.find((m) => m.id === payment.memberId);
+            
+            const statusMapping = {
+            'Paid': 'Lunas',
+            'Unpaid': 'Belum Lunas',
+            }
+            return { ...payment, member, status: statusMapping[payment.status] as 'Lunas' | 'Belum Lunas' };
+        });
+  }, [payments, members]);
+
 
   const handleOptimizeClick = (member: Member) => {
     setSelectedMember(member);
@@ -155,5 +175,3 @@ export function PaymentOverview() {
     </Card>
   );
 }
-
-    

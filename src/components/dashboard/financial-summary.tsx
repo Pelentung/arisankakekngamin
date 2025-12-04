@@ -1,23 +1,42 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
-import { arisanData } from '@/app/data';
-import { useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { subscribeToData } from '@/app/data';
+import type { DetailedPayment, Expense } from '@/app/data';
+import { useFirestore } from '@/firebase';
 
 export function FinancialSummary() {
+  const db = useFirestore();
+  const [payments, setPayments] = useState<DetailedPayment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubPayments = subscribeToData(db, 'payments', (data) => setPayments(data as DetailedPayment[]));
+    const unsubExpenses = subscribeToData(db, 'expenses', (data) => setExpenses(data as Expense[]));
+
+    return () => {
+        unsubPayments();
+        unsubExpenses();
+    };
+  }, [db]);
+
+
   const { remainingCash } =
     useMemo(() => {
-      const totalIncome = arisanData.payments
+      const totalIncome = payments
         .filter((p) => p.status === 'Paid')
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + p.totalAmount, 0);
 
-      const totalExpenses = arisanData.expenses.reduce((sum, e) => sum + e.amount, 0);
+      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
       const remainingCash = totalIncome - totalExpenses;
 
       return { remainingCash };
-    }, []);
+    }, [payments, expenses]);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

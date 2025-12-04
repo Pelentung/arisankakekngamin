@@ -1,7 +1,9 @@
+
 'use client';
 
-import { useState } from 'react';
-import { arisanData, type Group, type Member } from '@/app/data';
+import { useState, useEffect } from 'react';
+import type { Group, Member } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -49,6 +51,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useFirestore } from '@/firebase';
+import { collection, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 // Dialog for Adding/Editing a single member
 const MemberDialog = ({
@@ -60,12 +64,12 @@ const MemberDialog = ({
   member: Partial<Member> | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (member: Member) => void;
+  onSave: (member: Omit<Member, 'id'>, id?: string) => void;
 }) => {
   const [formData, setFormData] = useState<Partial<Member> | null>(member);
   const { toast } = useToast();
 
-  React.useEffect(() => {
+  useEffect(() => {
     setFormData(member);
   }, [member]);
 
@@ -84,8 +88,7 @@ const MemberDialog = ({
       return;
     }
 
-    const newMember: Member = {
-      id: formData.id || `m${arisanData.members.length + 1}`,
+    const newMemberData: Omit<Member, 'id'> = {
       name: formData.name,
       joinedDate: formData.joinedDate,
       avatarUrl:
@@ -98,7 +101,7 @@ const MemberDialog = ({
         preferredTime: 'any',
       },
     };
-    onSave(newMember);
+    onSave(newMemberData, formData.id);
   };
 
   return (
@@ -162,7 +165,7 @@ const AddMemberToGroupDialog = ({
   onClose: () => void;
   groups: Group[];
   allMembers: Member[];
-  onAdd: () => void;
+  onAdd: (groupId: string, memberId: string) => void;
 }) => {
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -178,8 +181,8 @@ const AddMemberToGroupDialog = ({
       return;
     }
 
-    const group = arisanData.groups.find(g => g.id === selectedGroupId);
-    const member = arisanData.members.find(m => m.id === selectedMemberId);
+    const group = groups.find(g => g.id === selectedGroupId);
+    const member = allMembers.find(m => m.id === selectedMemberId);
 
     if (group && member) {
       if (group.memberIds.includes(member.id)) {
@@ -189,12 +192,7 @@ const AddMemberToGroupDialog = ({
           variant: 'destructive',
         });
       } else {
-        group.memberIds.push(member.id);
-        toast({
-          title: 'Anggota Ditambahkan',
-          description: `${member.name} telah berhasil ditambahkan ke ${group.name}.`,
-        });
-        onAdd();
+        onAdd(group.id, member.id);
         onClose();
       }
     }
@@ -259,16 +257,26 @@ const AddMemberToGroupDialog = ({
 
 export default function ManageGroupsAndMembersPage() {
   const { toast } = useToast();
-  const [version, setVersion] = useState(0); // Used to force re-renders
+  const db = useFirestore();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [isMemberDialogOpen, setIsMemberDialogOpen] = useState(false);
   const [isAddToGroupDialogOpen, setIsAddToGroupDialogOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Partial<Member> | null>(
     null
   );
 
-  const { members, groups } = arisanData;
+  useEffect(() => {
+    if (!db) return;
+    const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => setGroups(data as Group[]));
 
-  const forceUpdate = () => setVersion(v => v + 1);
+    return () => {
+      unsubMembers();
+      unsubGroups();
+    };
+  }, [db]);
+
 
   // Handlers for Member Management
   const handleAddMember = () => {
@@ -281,49 +289,106 @@ export default function ManageGroupsAndMembersPage() {
     setIsMemberDialogOpen(true);
   };
 
-  const handleDeleteMember = (memberId: string) => {
-    arisanData.members = arisanData.members.filter(m => m.id !== memberId);
-    // Also remove from all groups
-    arisanData.groups.forEach(group => {
-      group.memberIds = group.memberIds.filter(id => id !== memberId);
-    });
-    forceUpdate();
-    toast({
-      title: 'Anggota Dihapus',
-      description: 'Anggota telah berhasil dihapus dari daftar.',
-    });
+  const handleDeleteMember = async (memberId: string) => {
+    if (!db) return;
+    
+    // First, remove the member from all groups that contain them
+    const batch = [];
+    for (const group of groups) {
+      if (group.memberIds.includes(memberId)) {
+        const groupRef = doc(db, 'groups', group.id);
+        batch.push(updateDoc(groupRef, { memberIds: arrayRemove(memberId) }));
+      }
+    }
+    
+    try {
+        await Promise.all(batch);
+        // After removing from groups, delete the member document
+        await deleteDoc(doc(db, 'members', memberId));
+        toast({
+          title: 'Anggota Dihapus',
+          description: 'Anggota telah berhasil dihapus dari daftar dan semua grup.',
+        });
+    } catch (error) {
+        console.error("Error deleting member:", error);
+        toast({
+            title: 'Gagal Menghapus',
+            description: 'Terjadi kesalahan saat menghapus anggota.',
+            variant: 'destructive',
+        });
+    }
   };
 
-  const handleSaveMember = (member: Member) => {
-    const isNew = !members.some(m => m.id === member.id);
-    if (isNew) {
-      arisanData.members.push({ ...member, id: `m${Date.now()}` });
-      toast({
-        title: 'Anggota Ditambahkan',
-        description: `${member.name} telah ditambahkan.`,
-      });
-    } else {
-      arisanData.members = arisanData.members.map(m =>
-        m.id === member.id ? member : m
-      );
-      toast({
-        title: 'Anggota Diperbarui',
-        description: `Data untuk ${member.name} telah diperbarui.`,
-      });
+  const handleSaveMember = async (memberData: Omit<Member, 'id'>, id?: string) => {
+    if (!db) return;
+    try {
+        if (id) {
+            // Update existing member
+            await updateDoc(doc(db, 'members', id), memberData);
+            toast({
+                title: 'Anggota Diperbarui',
+                description: `Data untuk ${memberData.name} telah diperbarui.`,
+            });
+        } else {
+            // Add new member
+            await addDoc(collection(db, 'members'), memberData);
+            toast({
+                title: 'Anggota Ditambahkan',
+                description: `${memberData.name} telah ditambahkan.`,
+            });
+        }
+        setIsMemberDialogOpen(false);
+    } catch(error) {
+        console.error("Error saving member:", error);
+        toast({
+            title: 'Gagal Menyimpan',
+            description: 'Terjadi kesalahan saat menyimpan data anggota.',
+            variant: 'destructive',
+        });
     }
-    forceUpdate();
-    setIsMemberDialogOpen(false);
   };
   
+  const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
+    if (!db) return;
+    try {
+        const groupRef = doc(db, 'groups', groupId);
+        await updateDoc(groupRef, {
+            memberIds: arrayUnion(memberId)
+        });
+        const member = members.find(m => m.id === memberId);
+        const group = groups.find(g => g.id === groupId);
+        toast({
+          title: 'Anggota Ditambahkan',
+          description: `${member?.name} telah berhasil ditambahkan ke ${group?.name}.`,
+        });
+    } catch (error) {
+        console.error("Error adding member to group:", error);
+        toast({
+            title: 'Gagal Menambahkan',
+            description: 'Terjadi kesalahan saat menambahkan anggota ke grup.',
+            variant: 'destructive',
+        });
+    }
+  }
+
   // Handler for removing a member from a specific group
-  const handleRemoveFromGroup = (groupId: string, memberId: string) => {
-    const group = arisanData.groups.find(g => g.id === groupId);
-    if (group) {
-        group.memberIds = group.memberIds.filter(id => id !== memberId);
-        forceUpdate();
+  const handleRemoveFromGroup = async (groupId: string, memberId: string) => {
+    if (!db) return;
+    try {
+        const groupRef = doc(db, 'groups', groupId);
+        await updateDoc(groupRef, {
+            memberIds: arrayRemove(memberId)
+        });
         toast({
             title: "Anggota Dihapus dari Grup",
             description: "Anggota telah dikeluarkan dari grup ini."
+        });
+    } catch (error) {
+        console.error("Error removing member from group:", error);
+        toast({
+            title: 'Gagal Menghapus',
+            description: 'Terjadi kesalahan saat mengeluarkan anggota dari grup.',
+            variant: 'destructive',
         });
     }
   }
@@ -498,7 +563,7 @@ export default function ManageGroupsAndMembersPage() {
         onClose={() => setIsAddToGroupDialogOpen(false)}
         groups={groups}
         allMembers={members}
-        onAdd={forceUpdate}
+        onAdd={handleAddMemberToGroup}
       />
     </>
   );

@@ -1,4 +1,9 @@
-import { arisanData } from '@/app/data';
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import type { Group, Member } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import {
   Accordion,
   AccordionContent,
@@ -14,8 +19,39 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { CheckCircle } from 'lucide-react';
+import { useFirestore } from '@/firebase';
 
 export function WinnerHistory() {
+  const db = useFirestore();
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubGroups = subscribeToData(db, 'groups', (data) => setGroups(data as Group[]));
+    const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    return () => {
+        unsubGroups();
+        unsubMembers();
+    };
+  }, [db]);
+
+  if (!groups.length || !members.length) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Anggota Yang Sudah Narik</CardTitle>
+                <CardDescription>
+                Daftar anggota yang sudah pernah memenangkan undian di setiap grup.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p>Loading winner history...</p>
+            </CardContent>
+        </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -26,10 +62,10 @@ export function WinnerHistory() {
       </CardHeader>
       <CardContent>
         <Accordion type="single" collapsible className="w-full">
-          {arisanData.groups.map(group => {
+          {groups.map(group => {
             const winners = (group.winnerHistory || [])
               .map(history => {
-                const member = arisanData.members.find(
+                const member = members.find(
                   m => m.id === history.memberId
                 );
                 return member ? { ...member, month: history.month } : null;

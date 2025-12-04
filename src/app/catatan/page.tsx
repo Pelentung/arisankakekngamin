@@ -1,7 +1,9 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Note, subscribeToData } from '@/app/data';
+import type { Note } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -33,8 +35,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
-import { db } from '@/firebase/config';
 import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
 
 const NoteDialog = ({
   note,
@@ -113,16 +115,18 @@ const NoteDialog = ({
 
 export default function NotesPage() {
   const { toast } = useToast();
+  const db = useFirestore();
   const [notes, setNotes] = useState<Note[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Partial<Note> | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToData('notes', (data) => {
+    if (!db) return;
+    const unsubscribe = subscribeToData(db, 'notes', (data) => {
         setNotes(data as Note[]);
     });
     return () => unsubscribe();
-  }, []);
+  }, [db]);
 
   const handleAdd = () => {
     setSelectedNote({});

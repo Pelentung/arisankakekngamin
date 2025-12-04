@@ -1,7 +1,9 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { arisanData, type Member, type Group } from '@/app/data';
+import type { Member, Group } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +25,8 @@ import { Trophy, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format, getMonth, getYear } from 'date-fns';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 interface LotteryCardProps {
     group: Group;
@@ -33,30 +37,26 @@ interface LotteryCardProps {
 
 export function LotteryCard({ group, title, description, buttonText }: LotteryCardProps) {
   const { toast } = useToast();
+  const db = useFirestore();
+  const [members, setMembers] = useState<Member[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
-  const [currentWinner, setCurrentWinner] = useState<Member | undefined>(undefined);
   const [drawnWinner, setDrawnWinner] = useState<Member | undefined>(undefined);
-  const [_, setForceRender] = useState(0);
 
   useEffect(() => {
-    const targetGroup = arisanData.groups.find(g => g.id === group.id);
-    if (targetGroup?.currentWinnerId) {
-      const winner = arisanData.members.find(
-        (m) => m.id === targetGroup.currentWinnerId
-      );
-      setCurrentWinner(winner);
-    } else {
-        setCurrentWinner(undefined);
-    }
-  }, [group]);
+    if (!db) return;
+    const unsub = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
+    return () => unsub();
+  }, [db]);
   
-  const handleDrawWinner = () => {
-    const targetGroup = arisanData.groups.find(g => g.id === group.id);
-    if (!targetGroup) return;
+  const currentWinner = members.find(m => m.id === group.currentWinnerId);
+  const groupMembers = members.filter(m => group.memberIds.includes(m.id));
+  const winnerIds = group.winnerHistory?.map(wh => wh.memberId) || [];
 
-    const winnerIds = targetGroup.winnerHistory?.map(wh => wh.memberId) || [];
-    const eligibleMembers = arisanData.members.filter(m => targetGroup.memberIds.includes(m.id) && !winnerIds.includes(m.id));
+  const handleDrawWinner = async () => {
+    if (!db) return;
+
+    const eligibleMembers = members.filter(m => group.memberIds.includes(m.id) && !winnerIds.includes(m.id));
 
     if (eligibleMembers.length === 0) {
         toast({
@@ -71,31 +71,38 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
     const randomIndex = Math.floor(Math.random() * eligibleMembers.length);
     const newWinner = eligibleMembers[randomIndex];
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setDrawnWinner(newWinner);
       
-      // Update data source
-      targetGroup.currentWinnerId = newWinner.id;
-      const drawMonth = `${getYear(new Date())}-${getMonth(new Date()) + 1}`;
-      if (!targetGroup.winnerHistory) {
-        targetGroup.winnerHistory = [];
+      const groupRef = doc(db, 'groups', group.id);
+      const drawMonth = format(new Date(), 'yyyy-MM-dd');
+      const newWinnerHistory = [...(group.winnerHistory || []), { month: drawMonth, memberId: newWinner.id }];
+      
+      try {
+        await updateDoc(groupRef, {
+            currentWinnerId: newWinner.id,
+            winnerHistory: newWinnerHistory
+        });
+
+        setIsDrawing(false);
+        setShowWinnerDialog(true);
+
+        toast({
+          title: "🎉 Penarik Baru Telah Diundi! 🎉",
+          description: `Selamat kepada ${newWinner.name}!`,
+        });
+
+      } catch (error) {
+        console.error("Error updating winner:", error);
+        toast({
+            title: "Gagal Mengundi",
+            description: "Terjadi kesalahan saat menyimpan pemenang baru.",
+            variant: "destructive",
+        });
+        setIsDrawing(false);
       }
-      targetGroup.winnerHistory.push({ month: drawMonth, memberId: newWinner.id });
-
-      setIsDrawing(false);
-      setShowWinnerDialog(true);
-      setCurrentWinner(newWinner);
-      setForceRender(v => v + 1);
-
-      toast({
-        title: "🎉 Penarik Baru Telah Diundi! 🎉",
-        description: `Selamat kepada ${newWinner.name}!`,
-      });
     }, 2000);
   };
-
-  const groupMembers = arisanData.members.filter(m => group.memberIds.includes(m.id));
-  const winnerIds = group.winnerHistory?.map(wh => wh.memberId) || [];
 
   return (
     <>
@@ -139,7 +146,7 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
           </div>
         </CardContent>
         <CardFooter>
-          <Button className="w-full" onClick={handleDrawWinner} disabled={isDrawing || !group}>
+          <Button className="w-full" onClick={handleDrawWinner} disabled={isDrawing || !group || groupMembers.length === 0}>
             {isDrawing ? "Mengundi..." : buttonText}
           </Button>
         </CardFooter>

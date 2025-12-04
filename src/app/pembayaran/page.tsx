@@ -1,8 +1,9 @@
 
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { arisanData, type DetailedPayment, type Member, type Group, type ContributionSettings } from '@/app/data';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import type { DetailedPayment, Member, Group, ContributionSettings } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -25,6 +26,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc, writeBatch } from 'firebase/firestore';
 
 type PaymentDetail = DetailedPayment & { member?: Member };
 type ContributionType = keyof Omit<ContributionSettings, 'others'> | string;
@@ -149,12 +152,40 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: PaymentDet
 
 export default function PaymentPage() {
   const { toast } = useToast();
-  const [payments, setPayments] = useState<DetailedPayment[]>(arisanData.payments);
+  const db = useFirestore();
+  const [allPayments, setAllPayments] = useState<DetailedPayment[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
+  const [contributionSettings, setContributionSettings] = useState<ContributionSettings | null>(null);
+
+  const [localChanges, setLocalChanges] = useState<DetailedPayment[]>([]);
   const [selectedGroup, setSelectedGroup] = useState('g3'); // Default to 'Grup Arisan Utama'
 
-  const { contributionSettings } = arisanData;
+  useEffect(() => {
+    if (!db) return;
+    const unsubPayments = subscribeToData(db, 'payments', (data) => {
+      setAllPayments(data as DetailedPayment[]);
+      setLocalChanges(data as DetailedPayment[]); 
+    });
+    const unsubMembers = subscribeToData(db, 'members', (data) => setAllMembers(data as Member[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => setAllGroups(data as Group[]));
+    const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => {
+        if (data.length > 0) {
+            setContributionSettings(data[0] as ContributionSettings);
+        }
+    });
+
+    return () => {
+        unsubPayments();
+        unsubMembers();
+        unsubGroups();
+        unsubSettings();
+    }
+  }, [db]);
+
 
   const contributionLabels = useMemo(() => {
+    if (!contributionSettings) return {};
     const labels: Record<string, string> = {
         main: 'Iuran Utama',
         cash: 'Iuran Kas',
@@ -168,6 +199,10 @@ export default function PaymentPage() {
   }, [contributionSettings]);
 
   const calculatePaymentDetails = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number, contributions: DetailedPayment['contributions'] } => {
+    if (!contributionSettings) {
+        return { status: payment.status, totalAmount: payment.totalAmount, contributions: payment.contributions };
+    }
+
     if (payment.groupId !== 'g3') {
         // For non-main groups, total amount is fixed. Status depends on whether all contributions are paid.
         const allPaid = Object.values(payment.contributions).every(c => c.paid);
@@ -213,7 +248,7 @@ export default function PaymentPage() {
   }, [contributionSettings]);
 
   const handleDetailedPaymentChange = (paymentId: string, contributionType: ContributionType, isPaid: boolean) => {
-    setPayments(prevPayments =>
+    setLocalChanges(prevPayments =>
       prevPayments.map(p => {
         if (p.id === paymentId) {
           const updatedContributions = {
@@ -224,16 +259,6 @@ export default function PaymentPage() {
           // Recalculate status based on the new paid status of individual contributions
           const { status } = calculatePaymentDetails({ ...p, contributions: updatedContributions });
           
-          const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
-          const contributionLabel = contributionLabels[contributionType];
-          
-          if (contributionLabel) {
-            toast({
-              title: 'Status Iuran Diperbarui',
-              description: `${contributionLabel} untuk ${memberName} ${isPaid ? 'sudah' : 'belum'} dibayar.`,
-            });
-          }
-          
           return { ...p, contributions: updatedContributions, status };
         }
         return p;
@@ -242,7 +267,7 @@ export default function PaymentPage() {
   };
 
   const handleSimpleStatusChange = (paymentId: string, newStatus: DetailedPayment['status']) => {
-    setPayments(prevPayments => prevPayments.map(p => {
+    setLocalChanges(prevPayments => prevPayments.map(p => {
         if (p.id === paymentId) {
             const allPaid = newStatus === 'Paid';
             const updatedContributions = { ...p.contributions };
@@ -255,12 +280,6 @@ export default function PaymentPage() {
                 }
             }
             
-            const memberName = arisanData.members.find(m => m.id === p.memberId)?.name || 'Anggota';
-            toast({
-              title: 'Status Pembayaran Diperbarui',
-              description: `Status untuk ${memberName} diubah menjadi ${newStatus === 'Paid' ? 'Lunas' : 'Belum Lunas'}.`,
-            });
-
             return { ...p, status: newStatus, contributions: updatedContributions };
         }
         return p;
@@ -268,10 +287,10 @@ export default function PaymentPage() {
   }
   
   const filteredPayments = useMemo(() => {
-    return payments
+    return localChanges
       .filter(p => p.groupId === selectedGroup)
       .map(p => {
-          const member = arisanData.members.find(m => m.id === p.memberId);
+          const member = allMembers.find(m => m.id === p.memberId);
           const { status, totalAmount, contributions } = calculatePaymentDetails(p);
           return {
               ...p,
@@ -281,17 +300,31 @@ export default function PaymentPage() {
               contributions
           };
       });
-  }, [payments, selectedGroup, calculatePaymentDetails]);
+  }, [localChanges, selectedGroup, allMembers, calculatePaymentDetails]);
 
 
-  const saveAllChanges = () => {
-    // In a real app, this would send the updated 'payments' state to your backend API.
-    // For now, we update the global mock data.
-    arisanData.payments = payments;
-    toast({
-        title: "Perubahan Disimpan",
-        description: "Semua status pembayaran telah disimpan."
-    })
+  const saveAllChanges = async () => {
+    if (!db) return;
+    const batch = writeBatch(db);
+    localChanges.forEach(payment => {
+        const docRef = doc(db, "payments", payment.id);
+        batch.update(docRef, { contributions: payment.contributions, status: payment.status });
+    });
+    
+    try {
+        await batch.commit();
+        toast({
+            title: "Perubahan Disimpan",
+            description: "Semua status pembayaran telah disimpan di Firestore."
+        })
+    } catch (error) {
+        console.error("Error saving changes: ", error);
+        toast({
+            title: "Gagal Menyimpan",
+            description: "Terjadi kesalahan saat menyimpan perubahan.",
+            variant: "destructive"
+        })
+    }
   }
 
   return (
@@ -312,7 +345,7 @@ export default function PaymentPage() {
                     <SelectValue placeholder="Pilih Grup" />
                 </SelectTrigger>
                 <SelectContent>
-                    {arisanData.groups.map(group => (
+                    {allGroups.map(group => (
                     <SelectItem key={group.id} value={group.id}>
                         {group.name}
                     </SelectItem>
@@ -340,5 +373,3 @@ export default function PaymentPage() {
     </div>
   );
 }
-
-    

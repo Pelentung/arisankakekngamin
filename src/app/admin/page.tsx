@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ContributionSettings, OtherContribution } from '@/app/data';
+import type { ContributionSettings, OtherContribution } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -17,8 +17,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -34,29 +34,28 @@ const parseCurrency = (value: string) => {
 
 export default function AdminPage() {
   const { toast } = useToast();
+  const db = useFirestore();
   const [settings, setSettings] = useState<ContributionSettings | null>(null);
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      if (db) {
-        const docRef = doc(db, 'contributionSettings', 'default');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setSettings(docSnap.data() as ContributionSettings);
-        } else {
-          // Initialize with default if not exists
-          setSettings({
-            main: 50000,
-            cash: 10000,
-            sick: 5000,
-            bereavement: 5000,
-            others: [{ id: 'other1', description: 'Iuran Lainnya', amount: 0 }],
-          });
-        }
+    if (!db) return;
+    const docRef = doc(db, 'contributionSettings', 'default');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as ContributionSettings);
+      } else {
+        // Initialize with default if not exists
+        setSettings({
+          main: 50000,
+          cash: 10000,
+          sick: 5000,
+          bereavement: 5000,
+          others: [{ id: 'other1', description: 'Iuran Lainnya', amount: 0 }],
+        });
       }
-    };
-    fetchSettings();
-  }, []);
+    });
+    return () => unsubscribe();
+  }, [db]);
 
   if (!settings) {
     return (

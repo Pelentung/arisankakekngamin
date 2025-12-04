@@ -1,8 +1,9 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { arisanData } from '@/app/data';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { Group, Member, DetailedPayment, Expense, ContributionSettings } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,6 +11,7 @@ import { ArrowDownCircle, ArrowUpCircle, Banknote, UserCheck } from 'lucide-reac
 import { format, getMonth, getYear, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { useFirestore } from '@/firebase';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -32,18 +34,43 @@ const generateMonthOptions = () => {
 };
 
 export function MonthlyReport() {
+    const db = useFirestore();
+    const [allPayments, setAllPayments] = useState<DetailedPayment[]>([]);
+    const [allMembers, setAllMembers] = useState<Member[]>([]);
+    const [allGroups, setAllGroups] = useState<Group[]>([]);
+    const [contributionSettings, setContributionSettings] = useState<ContributionSettings | null>(null);
+
     const monthOptions = useMemo(() => generateMonthOptions(), []);
-    // Set default to be the latest month available in options
     const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
-    const { contributionSettings } = arisanData;
+
+    useEffect(() => {
+        if (!db) return;
+        const unsubPayments = subscribeToData(db, 'payments', data => setAllPayments(data as DetailedPayment[]));
+        const unsubMembers = subscribeToData(db, 'members', data => setAllMembers(data as Member[]));
+        const unsubGroups = subscribeToData(db, 'groups', data => setAllGroups(data as Group[]));
+        const unsubSettings = subscribeToData(db, 'contributionSettings', data => {
+            if (data.length > 0) setContributionSettings(data[0] as ContributionSettings);
+        });
+
+        return () => {
+            unsubPayments();
+            unsubMembers();
+            unsubGroups();
+            unsubSettings();
+        };
+    }, [db]);
+
 
     const reportData = useMemo(() => {
+        if (!contributionSettings) {
+             return { cashIn: 0, cashOut: 0, endingBalance: 0, winner: null, transactions: [], sickFund: 0, bereavementFund: 0 };
+        }
         const [year, month] = selectedMonth.split('-').map(Number);
         
-        const mainGroup = arisanData.groups.find(g => g.id === 'g3');
+        const mainGroup = allGroups.find(g => g.id === 'g3');
         if (!mainGroup) return { cashIn: 0, cashOut: 0, endingBalance: 0, winner: null, transactions: [], sickFund: 0, bereavementFund: 0 };
         
-        const allPaymentsForMonth = arisanData.payments
+        const allPaymentsForMonth = allPayments
             .filter(p => {
                 const paymentDueDate = new Date(p.dueDate);
                 return getYear(paymentDueDate) === year && getMonth(paymentDueDate) === month;
@@ -68,20 +95,21 @@ export function MonthlyReport() {
         // Add other groups' main contribution to cashIn
         allPaymentsForMonth.forEach(p => {
             if (p.groupId !== mainGroup.id && p.status === 'Paid') {
-                const group = arisanData.groups.find(g => g.id === p.groupId);
+                const group = allGroups.find(g => g.id === p.groupId);
                 if(group) cashIn += group.contributionAmount;
             }
         });
         
-        const monthString = `${year}-${String(month + 1).padStart(2, '0')}`;
-        const winnerEntry = mainGroup.winnerHistory?.find(wh => wh.month.startsWith(`${year}-${month + 1}`) || wh.month === `${year}-${String(month + 1).padStart(2, '0')}`);
+        const winnerEntry = mainGroup.winnerHistory?.find(wh => {
+            const whDate = new Date(wh.month);
+            return getYear(whDate) === year && getMonth(whDate) === month;
+        });
         
         let winner = null;
         if (winnerEntry) {
-            winner = arisanData.members.find(m => m.id === winnerEntry.memberId);
+            winner = allMembers.find(m => m.id === winnerEntry.memberId);
         }
         
-        // Cash out is the total main contribution for the main group
         const cashOut = winner ? contributionSettings.main * mainGroup.memberIds.length : 0;
 
         const endingBalance = cashIn - cashOut;
@@ -89,8 +117,8 @@ export function MonthlyReport() {
         const detailedTransactions = allPaymentsForMonth
             .filter(p => p.status === 'Paid')
             .map(p => {
-                const member = arisanData.members.find(m => m.id === p.memberId);
-                const group = arisanData.groups.find(g => g.id === p.groupId);
+                const member = allMembers.find(m => m.id === p.memberId);
+                const group = allGroups.find(g => g.id === p.groupId);
                 const paymentHistoryEntry = member?.paymentHistory.find(ph => {
                     const phDate = new Date(ph.date);
                     return getYear(phDate) === year && getMonth(phDate) === month;
@@ -119,7 +147,7 @@ export function MonthlyReport() {
             .filter(tx => tx.amount > 0);
 
         return { cashIn, cashOut, endingBalance, winner, transactions: detailedTransactions, sickFund, bereavementFund };
-    }, [selectedMonth, contributionSettings]);
+    }, [selectedMonth, contributionSettings, allPayments, allGroups, allMembers]);
 
 
   return (
@@ -203,7 +231,7 @@ export function MonthlyReport() {
 
       <Card>
         <CardHeader>
-            <CardTitle>Detail Pemasukan Bulan {format(new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1]), 'MMMM yyyy', { locale: id })}</CardTitle>
+            <CardTitle>Detail Pemasukan Bulan {format(new Date(selectedMonth.split('-')[0], parseInt(selectedMonth.split('-')[1])), 'MMMM yyyy', { locale: id })}</CardTitle>
             <CardDescription>Daftar semua iuran yang telah dibayarkan pada bulan yang dipilih (tidak termasuk dana sosial).</CardDescription>
         </CardHeader>
         <CardContent>

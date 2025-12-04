@@ -1,7 +1,9 @@
+
 'use client';
 
-import { useState } from 'react';
-import { arisanData, type Expense } from '@/app/data';
+import { useState, useEffect } from 'react';
+import type { Expense } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -27,7 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Receipt } from 'lucide-react';
+import { MoreHorizontal, PlusCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import {
@@ -43,6 +45,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFirestore } from '@/firebase';
+import { collection, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 const ExpenseDialog = ({
   expense,
@@ -53,12 +57,12 @@ const ExpenseDialog = ({
   expense: Partial<Expense> | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (expense: Expense) => void;
+  onSave: (expense: Omit<Expense, 'id'>, id?: string) => void;
 }) => {
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
 
-  React.useEffect(() => {
+  useEffect(() => {
     setFormData(expense);
   }, [expense]);
 
@@ -86,14 +90,13 @@ const ExpenseDialog = ({
       return;
     }
     
-    const newExpense: Expense = {
-      id: formData.id || `e${arisanData.expenses.length + 1}`,
+    const newExpenseData: Omit<Expense, 'id'> = {
       description: formData.description,
       date: formData.date,
       amount: formData.amount,
       category: formData.category,
     };
-    onSave(newExpense);
+    onSave(newExpenseData, formData.id);
   };
 
   return (
@@ -154,9 +157,16 @@ const ExpenseDialog = ({
 
 export default function ExpensesPage() {
   const { toast } = useToast();
-  const [expenses, setExpenses] = useState<Expense[]>(arisanData.expenses);
+  const db = useFirestore();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Partial<Expense> | null>(null);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubscribe = subscribeToData(db, 'expenses', (data) => setExpenses(data as Expense[]));
+    return () => unsubscribe();
+  }, [db]);
 
   const handleAdd = () => {
     setSelectedExpense({ date: format(new Date(), 'yyyy-MM-dd')});
@@ -168,25 +178,43 @@ export default function ExpensesPage() {
     setIsDialogOpen(true);
   };
   
-  const handleDelete = (expenseId: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== expenseId));
-    toast({
-        title: "Pengeluaran Dihapus",
-        description: "Data pengeluaran telah berhasil dihapus.",
-    });
+  const handleDelete = async (expenseId: string) => {
+    if (!db) return;
+    try {
+        await deleteDoc(doc(db, 'expenses', expenseId));
+        toast({
+            title: "Pengeluaran Dihapus",
+            description: "Data pengeluaran telah berhasil dihapus.",
+        });
+    } catch (error) {
+        console.error("Error deleting expense:", error);
+        toast({
+            title: "Gagal Menghapus",
+            description: "Terjadi kesalahan saat menghapus pengeluaran.",
+            variant: "destructive",
+        });
+    }
   };
 
-  const handleSave = (expense: Expense) => {
-    const isNew = !expense.id.startsWith('e') || !expenses.some(e => e.id === expense.id);
-    if (isNew) {
-        const newExpense = { ...expense, id: `e${Math.random()}`}; 
-        setExpenses(prev => [...prev, newExpense]);
-        toast({ title: "Pengeluaran Ditambahkan", description: "Data pengeluaran baru telah ditambahkan." });
-    } else {
-        setExpenses(prev => prev.map(e => e.id === expense.id ? expense : e));
-        toast({ title: "Pengeluaran Diperbarui", description: "Data pengeluaran telah diperbarui." });
+  const handleSave = async (expenseData: Omit<Expense, 'id'>, id?: string) => {
+    if (!db) return;
+    try {
+        if (id) {
+            await updateDoc(doc(db, 'expenses', id), expenseData);
+            toast({ title: "Pengeluaran Diperbarui", description: "Data pengeluaran telah diperbarui." });
+        } else {
+            await addDoc(collection(db, 'expenses'), expenseData);
+            toast({ title: "Pengeluaran Ditambahkan", description: "Data pengeluaran baru telah ditambahkan." });
+        }
+        setIsDialogOpen(false);
+    } catch (error) {
+        console.error("Error saving expense:", error);
+        toast({
+            title: "Gagal Menyimpan",
+            description: "Terjadi kesalahan saat menyimpan pengeluaran.",
+            variant: "destructive",
+        });
     }
-    setIsDialogOpen(false);
   };
 
   const formatCurrency = (amount: number) =>

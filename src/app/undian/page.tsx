@@ -1,14 +1,28 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
-import { arisanData } from '@/app/data';
+import type { Group } from '@/app/data';
+import { subscribeToData } from '@/app/data';
 import { LotteryCard } from '@/components/undian/lottery-card';
+import { useFirestore } from '@/firebase';
 
 export default function UndianPage() {
+  const db = useFirestore();
+  const [groups, setGroups] = useState<Group[]>([]);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubscribe = subscribeToData(db, 'groups', (data) => {
+        setGroups(data as Group[]);
+    });
+    return () => unsubscribe();
+  }, [db]);
     
-  const groupMain = arisanData.groups.find(g => g.id === 'g1');
-  const group10k = arisanData.groups.find(g => g.id === 'g2');
-  const group20k = arisanData.groups.find(g => g.id === 'g1'); // Re-using g1 for demo as there isn't a separate 20k group
+  const groupMain = groups.find(g => g.id === 'g1');
+  const group10k = groups.find(g => g.id === 'g2');
+  const group20k = groups.find(g => g.id === 'g1'); // Re-using g1 for demo as there isn't a separate 20k group
   
   return (
     <div className="flex flex-col min-h-screen">
