@@ -12,6 +12,7 @@ import {
   FileText,
   Receipt,
   StickyNote,
+  Wallet,
 } from 'lucide-react';
 
 import {
@@ -28,6 +29,7 @@ import { Separator } from '../ui/separator';
 const navItems = [
   { href: '/', label: 'Menu Utama', icon: LayoutDashboard },
   { href: '/laporan', label: 'Laporan', icon: FileText },
+  { href: '/keuangan', label: 'Pengelolaan Keuangan', icon: Wallet },
   { href: '/grup', label: 'Kelola Grup & Anggota', icon: Users },
   { href: '/pembayaran', label: 'Pembayaran', icon: Coins },
   { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
