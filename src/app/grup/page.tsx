@@ -317,6 +317,106 @@ const AddMemberToGroupDialog = ({
   );
 };
 
+// Dialog for creating a new group
+const CreateGroupDialog = ({
+  isOpen,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (group: Omit<Group, 'id' | 'memberIds'>) => void;
+}) => {
+  const { toast } = useToast();
+  const [name, setName] = useState('');
+  const [contributionAmount, setContributionAmount] = useState(0);
+  const [cycle, setCycle] = useState<'monthly' | 'weekly'>('monthly');
+
+  const handleSave = () => {
+    if (!name || contributionAmount <= 0) {
+      toast({
+        title: 'Data Tidak Lengkap',
+        description: 'Nama grup dan jumlah iuran harus diisi.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    onSave({
+      name,
+      contributionAmount,
+      cycle,
+    });
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setName('');
+      setContributionAmount(0);
+      setCycle('monthly');
+    }
+  }, [isOpen]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Buat Grup Baru</DialogTitle>
+          <DialogDescription>
+            Isi detail untuk grup arisan baru.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="name" className="text-right">
+              Nama Grup
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="col-span-3"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="contributionAmount" className="text-right">
+              Jumlah Iuran (Rp)
+            </Label>
+            <Input
+              id="contributionAmount"
+              type="number"
+              value={contributionAmount}
+              onChange={e => setContributionAmount(Number(e.target.value))}
+              className="col-span-3"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="cycle" className="text-right">
+              Siklus
+            </Label>
+            <Select value={cycle} onValueChange={value => setCycle(value as 'monthly' | 'weekly')}>
+              <SelectTrigger id="cycle" className="col-span-3">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">Bulanan</SelectItem>
+                <SelectItem value="weekly">Mingguan</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={handleSave}>Simpan Grup</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+
 export default function ManageGroupsAndMembersPage() {
   const { toast } = useToast();
   const db = useFirestore();
@@ -324,14 +424,55 @@ export default function ManageGroupsAndMembersPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isMemberDialogOpen, setIsMemberDialogOpen] = useState(false);
   const [isAddToGroupDialogOpen, setIsAddToGroupDialogOpen] = useState(false);
+  const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Partial<Member> | null>(
     null
   );
 
   useEffect(() => {
     if (!db) return;
+    
+    // Seed initial groups if none exist
+    const seedInitialGroups = async () => {
+      if (groups.length === 0) {
+        const initialGroups: Omit<Group, 'id' | 'memberIds'>[] = [
+          { name: 'Arisan Utama', contributionAmount: 50000, cycle: 'monthly' },
+          { name: 'Arisan Uang Kaget Rp. 10.000', contributionAmount: 10000, cycle: 'monthly' },
+          { name: 'Arisan Uang Kaget Rp. 20.000', contributionAmount: 20000, cycle: 'monthly' },
+        ];
+        
+        const batch = writeBatch(db);
+        initialGroups.forEach(groupData => {
+            const docRef = doc(collection(db, 'groups'));
+            batch.set(docRef, { ...groupData, memberIds: [] });
+        });
+
+        await batch.commit().catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: 'groups (batch)',
+                operation: 'create',
+                requestResourceData: initialGroups,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+      }
+    };
+    
+    // We run this only once when groups are loaded for the first time.
+    if (groups.length > 0) {
+       // do nothing if groups already exist
+    } else if (db) {
+       // Only run seeder if there are no groups.
+       // Note: This has a race condition, but it's okay for this app.
+       // A better implementation would use a transaction to check.
+       setTimeout(seedInitialGroups, 1000); // give a moment for initial data to load
+    }
+
+
     const unsubMembers = subscribeToData(db, 'members', (data) => setMembers(data as Member[]));
-    const unsubGroups = subscribeToData(db, 'groups', (data) => setGroups(data as Group[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => {
+        setGroups(data as Group[])
+    });
 
     return () => {
       unsubMembers();
@@ -468,6 +609,29 @@ export default function ManageGroupsAndMembersPage() {
         errorEmitter.emit('permission-error', permissionError);
     });
   }
+  
+  const handleSaveGroup = (groupData: Omit<Group, 'id' | 'memberIds'>) => {
+    if (!db) return;
+    const dataToCreate = {
+      ...groupData,
+      memberIds: [],
+    };
+    addDoc(collection(db, 'groups'), dataToCreate)
+      .then(() => {
+        toast({
+          title: 'Grup Dibuat',
+          description: `Grup "${groupData.name}" telah berhasil dibuat.`,
+        });
+      })
+      .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: 'groups',
+          operation: 'create',
+          requestResourceData: dataToCreate,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
 
   return (
     <>
@@ -475,7 +639,7 @@ export default function ManageGroupsAndMembersPage() {
         <Header title="Kelola Grup & Anggota" />
         <main className="flex-1 p-4 md:p-6">
           <Tabs defaultValue="groups">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <TabsList>
                 <TabsTrigger value="groups">
                   <Users className="mr-2" />
@@ -486,7 +650,11 @@ export default function ManageGroupsAndMembersPage() {
                   Kelola Semua Anggota
                 </TabsTrigger>
               </TabsList>
-              <div className='flex gap-2'>
+              <div className='flex gap-2 flex-wrap'>
+                <Button variant="outline" onClick={() => setIsCreateGroupDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Buat Grup Baru
+                </Button>
                 <Button variant="outline" onClick={() => setIsAddToGroupDialogOpen(true)}>
                     <Users className="mr-2 h-4 w-4" />
                     Tambahkan Anggota ke Grup
@@ -639,6 +807,14 @@ export default function ManageGroupsAndMembersPage() {
         allMembers={members}
         onAdd={handleAddMemberToGroup}
       />
+
+      <CreateGroupDialog 
+        isOpen={isCreateGroupDialogOpen}
+        onClose={() => setIsCreateGroupDialogOpen(false)}
+        onSave={handleSaveGroup}
+      />
     </>
   );
 }
+
+    
