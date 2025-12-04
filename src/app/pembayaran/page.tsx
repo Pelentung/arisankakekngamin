@@ -32,7 +32,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 type PaymentDetail = DetailedPayment & { member?: Member };
-type ContributionType = keyof Omit<ContributionSettings, 'others'> | string;
+type ContributionType = keyof DetailedPayment['contributions'];
 
 
 const formatCurrency = (amount: number) =>
@@ -44,17 +44,19 @@ const formatCurrency = (amount: number) =>
 
 // --- Detailed Table for Main Group ---
 const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: PaymentDetail[], onPaymentChange: (paymentId: string, contributionType: ContributionType, isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
+  const contributionKeys = Object.keys(contributionLabels);
+  
   return (
     <div className='overflow-x-auto'>
       <Table className="min-w-[1000px]">
         <TableHeader>
           <TableRow>
             <TableHead className='sticky left-0 bg-card z-10 w-[200px]'>Nama</TableHead>
-            <TableHead>Bulan</TableHead>
-            {Object.keys(contributionLabels).map(key => (
+            {contributionKeys.map(key => (
               <TableHead key={key}>{contributionLabels[key]}</TableHead>
             ))}
             <TableHead className="text-right">Jumlah</TableHead>
+            <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -71,12 +73,10 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
                   <div>{payment.member?.name}</div>
                 </div>
               </TableCell>
-              <TableCell>
-                {new Date(payment.dueDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-              </TableCell>
-              {Object.keys(payment.contributions).map(type => {
-                const contribution = payment.contributions[type];
-                 if (contribution && contribution.amount > 0 && contributionLabels[type]) {
+              
+              {contributionKeys.map(type => {
+                const contribution = payment.contributions[type as ContributionType];
+                 if (contribution && contributionLabels[type]) {
                     return (
                         <TableCell key={type}>
                             <div className="flex items-center gap-2">
@@ -93,10 +93,25 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
                         </TableCell>
                     )
                  }
-                 return null;
+                 return <TableCell key={type}></TableCell>; // Render empty cell if contribution doesn't exist for this payment
               })}
+
               <TableCell className="text-right">
                 {formatCurrency(payment.totalAmount)}
+              </TableCell>
+              <TableCell>
+                 <Badge
+                    variant={
+                        payment.status === 'Paid'
+                        ? 'secondary'
+                        : 'destructive'
+                    }
+                    className={
+                        payment.status === 'Paid' ? 'bg-green-500/20 text-green-400 border-green-500/20' : ''
+                    }
+                    >
+                    {payment.status === 'Paid' ? 'Lunas' : 'Belum Lunas'}
+                    </Badge>
               </TableCell>
             </TableRow>
           ))}
@@ -163,6 +178,8 @@ export default function PaymentPage() {
   const [localChanges, setLocalChanges] = useState<DetailedPayment[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
 
+  const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
+
   useEffect(() => {
     if (!db) return;
     const unsubPayments = subscribeToData(db, 'payments', (data) => {
@@ -195,8 +212,7 @@ export default function PaymentPage() {
         unsubGroups();
         unsubSettings();
     }
-  }, [db, selectedGroup]);
-
+  }, [db]); // remove selectedGroup from dependency array
 
   const contributionLabels = useMemo(() => {
     if (!contributionSettings) return {};
@@ -211,37 +227,37 @@ export default function PaymentPage() {
     });
     return labels;
   }, [contributionSettings]);
-  
-  const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
 
-  const calculatePaymentDetails = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number, contributions: DetailedPayment['contributions'] } => {
-    if (!contributionSettings) {
-        return { status: payment.status, totalAmount: payment.totalAmount, contributions: payment.contributions };
+  const calculatePaymentDetails = useCallback((payment: DetailedPayment): DetailedPayment => {
+    if (!contributionSettings || !mainArisanGroup) {
+        return payment;
     }
 
-    if (payment.groupId !== mainArisanGroup?.id) {
-        // For non-main groups, total amount is fixed. Status depends on whether all contributions are paid.
-        const allPaid = Object.values(payment.contributions).every(c => c.paid);
+    if (payment.groupId !== mainArisanGroup.id) {
+        const group = allGroups.find(g => g.id === payment.groupId);
+        const totalAmount = group ? group.contributionAmount : 0;
+        const contributions = { main: { amount: totalAmount, paid: payment.status === 'Paid' } };
         return {
-            status: allPaid ? 'Paid' : 'Unpaid',
-            totalAmount: payment.totalAmount, // This is the group's fixed contributionAmount
-            contributions: payment.contributions
+            ...payment,
+            totalAmount,
+            contributions: contributions as DetailedPayment['contributions']
         };
     }
     
     // For the main group, calculate everything dynamically based on settings
-    const updatedContributions: DetailedPayment['contributions'] = {
-        main: { ...payment.contributions.main, amount: contributionSettings.main },
-        cash: { ...payment.contributions.cash, amount: contributionSettings.cash },
-        sick: { ...payment.contributions.sick, amount: contributionSettings.sick },
-        bereavement: { ...payment.contributions.bereavement, amount: contributionSettings.bereavement },
-    };
+    const updatedContributions: DetailedPayment['contributions'] = JSON.parse(JSON.stringify(payment.contributions));
+
+    updatedContributions.main.amount = contributionSettings.main;
+    updatedContributions.cash.amount = contributionSettings.cash;
+    updatedContributions.sick.amount = contributionSettings.sick;
+    updatedContributions.bereavement.amount = contributionSettings.bereavement;
 
     contributionSettings.others.forEach(other => {
-        updatedContributions[other.id] = { 
-            ...(payment.contributions[other.id] || { paid: false }), // Keep paid status if exists
-            amount: other.amount 
-        };
+        if (!updatedContributions[other.id]) {
+             updatedContributions[other.id] = { amount: other.amount, paid: false };
+        } else {
+             updatedContributions[other.id].amount = other.amount;
+        }
     });
     
     let allPaid = true;
@@ -250,7 +266,7 @@ export default function PaymentPage() {
     for (const key in updatedContributions) {
       const type = key as ContributionType;
       const contribution = updatedContributions[type];
-      if (contribution && contribution.amount) {
+      if (contribution) {
         totalAmount += contribution.amount;
         if (contribution.amount > 0 && !contribution.paid) {
             allPaid = false;
@@ -260,22 +276,23 @@ export default function PaymentPage() {
 
     const status: DetailedPayment['status'] = allPaid ? 'Paid' : 'Unpaid';
     
-    return { status, totalAmount, contributions: updatedContributions };
-  }, [contributionSettings, mainArisanGroup]);
+    return { ...payment, status, totalAmount, contributions: updatedContributions };
+  }, [contributionSettings, mainArisanGroup, allGroups]);
 
   const handleDetailedPaymentChange = (paymentId: string, contributionType: ContributionType, isPaid: boolean) => {
     setLocalChanges(prevPayments =>
       prevPayments.map(p => {
         if (p.id === paymentId) {
-          const updatedContributions = {
-            ...p.contributions,
-            [contributionType]: { ...p.contributions[contributionType], paid: isPaid },
-          };
-
-          // Recalculate status based on the new paid status of individual contributions
-          const { status } = calculatePaymentDetails({ ...p, contributions: updatedContributions });
+          const updatedPayment = { ...p };
+          if (!updatedPayment.contributions[contributionType]) {
+            // This case should ideally not happen if data is seeded correctly, but as a fallback:
+             updatedPayment.contributions[contributionType] = { amount: 0, paid: isPaid };
+          } else {
+            updatedPayment.contributions[contributionType].paid = isPaid;
+          }
           
-          return { ...p, contributions: updatedContributions, status };
+          // Recalculate status and total based on the new paid status
+          return calculatePaymentDetails(updatedPayment);
         }
         return p;
       })
@@ -286,12 +303,12 @@ export default function PaymentPage() {
     setLocalChanges(prevPayments => prevPayments.map(p => {
         if (p.id === paymentId) {
             const allPaid = newStatus === 'Paid';
-            const updatedContributions = { ...p.contributions };
+            const updatedContributions: DetailedPayment['contributions'] = JSON.parse(JSON.stringify(p.contributions));
             
             // Mark all underlying contributions as paid or unpaid
             for (const key in updatedContributions) {
                 const type = key as ContributionType;
-                if(updatedContributions[type]) { // Check if contribution exists
+                if(updatedContributions[type]) {
                     updatedContributions[type].paid = allPaid;
                 }
             }
@@ -307,13 +324,11 @@ export default function PaymentPage() {
       .filter(p => p.groupId === selectedGroup)
       .map(p => {
           const member = allMembers.find(m => m.id === p.memberId);
-          const { status, totalAmount, contributions } = calculatePaymentDetails(p);
+          // Recalculate details for display, ensuring it reflects local changes
+          const detailedPayment = calculatePaymentDetails(p);
           return {
-              ...p,
+              ...detailedPayment,
               member,
-              status,
-              totalAmount,
-              contributions
           };
       });
   }, [localChanges, selectedGroup, allMembers, calculatePaymentDetails]);
@@ -344,7 +359,7 @@ export default function PaymentPage() {
         .then(() => {
             toast({
                 title: "Perubahan Disimpan",
-                description: "Semua status pembayaran telah disimpan di Firestore."
+                description: "Semua status pembayaran telah berhasil diperbarui."
             })
         })
         .catch((serverError) => {
@@ -386,8 +401,12 @@ export default function PaymentPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {filteredPayments.length > 0 ? (
-                selectedGroup === mainArisanGroup?.id ? (
+            {!contributionSettings || !mainArisanGroup ? (
+                 <div className="text-center text-muted-foreground py-8">
+                    Memuat pengaturan...
+                </div>
+            ) : filteredPayments.length > 0 ? (
+                selectedGroup === mainArisanGroup.id ? (
                     <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                 ) : (
                     <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
@@ -403,5 +422,3 @@ export default function PaymentPage() {
     </div>
   );
 }
-
-    
