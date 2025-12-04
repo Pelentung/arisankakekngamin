@@ -23,6 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Trophy, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
