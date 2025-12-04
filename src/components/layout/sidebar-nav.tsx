@@ -35,8 +35,6 @@ const allNavItems = [
   { href: '/laporan', label: 'Laporan', icon: FileText, adminOnly: false },
   { href: '/keuangan', label: 'Pengelolaan Keuangan', icon: Wallet, adminOnly: true },
   { href: '/grup', label: 'Kelola Grup & Anggota', icon: Users, adminOnly: true },
-  { href: '/pembayaran', label: 'Pembayaran', icon: Coins, adminOnly: true },
-  { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt, adminOnly: true },
   { href: '/undian', label: 'Yang Sudah Narik', icon: Trophy, adminOnly: true },
   { href: '/catatan', label: 'Catatan', icon: StickyNote, adminOnly: true },
 ];
