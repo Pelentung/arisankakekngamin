@@ -61,20 +61,19 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
       } else {
-        // User is signed out. This is the crucial part for fixing logout errors.
-        unsubscribeAll(); // Unsubscribe from all data listeners across the app.
+        // User is signed out.
+        unsubscribeAll(); // Unsubscribe from all data listeners.
         setUser(null);
         setLoading(false);
       }
       
-      // Return a cleanup function for the user document snapshot listener.
-      // This will be called when auth state changes or on component unmount.
+      // Cleanup the user document listener when auth state changes or component unmounts.
       return () => {
         userDocSnapshotUnsubscribe();
       };
     });
 
-    // Return a cleanup function for the main auth state listener.
+    // Cleanup the main auth state listener on component unmount.
     return () => unsubscribeAuth();
   }, [auth, db]);
 
