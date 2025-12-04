@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useEffect, useState, createContext, useContext } from 'react';
 import type { User as FirebaseAuthUser } from 'firebase/auth';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useAuth } from '../provider';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDocs, serverTimestamp, collection } from 'firebase/firestore';
 import { useFirestore } from '../provider';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -27,6 +28,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth || !db) {
+        // Firebase might not be initialized yet
+        return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
@@ -40,14 +46,14 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             } else {
                 // If user doc doesn't exist, create it.
                 // The first user to sign up will be made an admin.
-                const usersCollection = collection(db, 'users');
-                const usersSnapshot = await getDocs(usersCollection);
+                const usersCollectionRef = collection(db, 'users');
+                const usersSnapshot = await getDocs(usersCollectionRef);
                 const isFirstUser = usersSnapshot.empty;
                 
                 const newUserProfile = {
                     uid: firebaseUser.uid,
                     email: firebaseUser.email,
-                    displayName: firebaseUser.displayName,
+                    displayName: firebaseUser.displayName || firebaseUser.email,
                     photoURL: firebaseUser.photoURL,
                     isAdmin: isFirstUser, // First user is admin
                     createdAt: serverTimestamp(),
@@ -55,7 +61,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                 
                 try {
                     await setDoc(userRef, newUserProfile);
-                    setUser({ ...firebaseUser, isAdmin: isFirstUser });
+                    setUser({ ...firebaseUser, ...newUserProfile });
                 } catch (e) {
                      errorEmitter.emit('permission-error', new FirestorePermissionError({
                         path: userRef.path,

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "arisanData": {
@@ -332,7 +333,9 @@
     }
   },
   "auth": {
-    "providers": []
+    "providers": [
+      "password"
+    ]
   },
   "firestore": {
     "/arisanData/{arisanDataId}": {

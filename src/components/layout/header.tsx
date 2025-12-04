@@ -1,3 +1,4 @@
+
 'use client';
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -15,20 +16,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@/firebase';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, signOut } from 'firebase/auth';
 
 const UserMenu = () => {
   const { user, loading } = useUser();
   const auth = getAuth();
-
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Error during sign-in:", error);
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -43,12 +35,9 @@ const UserMenu = () => {
   }
 
   if (!user) {
-    return (
-      <Button variant="ghost" size="icon" onClick={handleLogin}>
-        <LogIn className="h-5 w-5" />
-        <span className="sr-only">Login</span>
-      </Button>
-    );
+    // The login form is now on the main page, so we don't need a login button here.
+    // We can return null or a placeholder.
+    return null;
   }
 
   return (
@@ -57,12 +46,12 @@ const UserMenu = () => {
         <Button variant="ghost" size="icon" className="rounded-full">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user.photoURL || ''} alt={user.displayName || 'User'} />
-            <AvatarFallback>{user.displayName?.charAt(0) || 'U'}</AvatarFallback>
+            <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{user.displayName}</DropdownMenuLabel>
+        <DropdownMenuLabel>{user.displayName || user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled>Profil</DropdownMenuItem>
         <DropdownMenuItem disabled>Pengaturan</DropdownMenuItem>
