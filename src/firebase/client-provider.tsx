@@ -30,7 +30,7 @@ export const FirebaseClientProvider: React.FC<{
 
   if (!firebaseContext) {
     // You can return a loader here if you want
-    return <div>Loading Firebase...</div>;
+    return <div className="flex items-center justify-center min-h-screen">Loading Firebase...</div>;
   }
 
   return (
