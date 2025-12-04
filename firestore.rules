@@ -14,22 +14,27 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Check for the existence of the user document and the isAdmin field.
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
     // Rules for users collection
     match /users/{userId} {
-      // Anyone can create their own user profile upon signup
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.isAdmin == false;
-      // Users can only read their own profile, admins can read any
+      // A new user can create their own profile. The first user is made admin client-side.
+      // Subsequent users cannot make themselves admin.
+      allow create: if isSignedIn() && isOwner(userId) && (request.resource.data.isAdmin == false || !('isAdmin' in request.resource.data));
+      // Users can read their own profile. Admins can read any profile.
       allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
-      // Users can update their own profile (except isAdmin field), admins can update any
-      allow update: if isSignedIn() && ((isOwner(userId) && !("isAdmin" in request.resource.data)) || isAdmin());
-      // Admins can delete users
+      // Users can update their own profile, but cannot change their admin status.
+      allow update: if isSignedIn() && isOwner(userId) && !('isAdmin' in request.resource.data);
+      // Admins can update any user profile, including admin status.
+      allow update: if isAdmin();
+      // Only admins can delete users.
       allow delete: if isAdmin();
     }
     
-    // Admins have full access to all other collections
+    // Admins have full access to all data collections
     match /arisanData/{docId} {
       allow read, write: if isAdmin();
     }
@@ -52,7 +57,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     
-    // Authenticated users (non-admins) have read-only access to some collections
+    // Authenticated non-admin users have read-only access to data needed for reports.
     match /members/{memberId} {
         allow get, list: if isSignedIn();
     }
