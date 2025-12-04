@@ -15,9 +15,7 @@ export default function UndianPage() {
   useEffect(() => {
     if (!db) return;
     const unsubscribe = subscribeToData(db, 'groups', (data) => {
-        // Sort groups by name to ensure consistent order
-        const sortedData = (data as Group[]).sort((a, b) => a.name.localeCompare(b.name));
-        setGroups(sortedData);
+        setGroups(data as Group[]);
     });
     return () => unsubscribe();
   }, [db]);

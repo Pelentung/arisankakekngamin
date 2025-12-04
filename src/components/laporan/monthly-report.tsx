@@ -93,13 +93,10 @@ export function MonthlyReport() {
         const cashOut = expensesForMonth.reduce((sum, e) => sum + e.amount, 0);
 
         const endingBalance = cashIn - cashOut;
-
-        const winnerEntry = mainGroup?.winnerHistory?.find(wh => {
-            const whDate = new Date(wh.month);
-            return getYear(whDate) === year && getMonth(whDate) === month;
-        });
         
-        const winner = winnerEntry ? allMembers.find(m => m.id === winnerEntry.memberId) : null;
+        const winner = mainGroup?.currentWinnerId 
+            ? allMembers.find(m => m.id === mainGroup.currentWinnerId) 
+            : null;
         
         const incomeTransactions = paymentsForMonth.map(p => {
             const member = allMembers.find(m => m.id === p.memberId);
@@ -301,8 +298,3 @@ export function MonthlyReport() {
     </div>
   );
 }
-
-
-    
-
-    
