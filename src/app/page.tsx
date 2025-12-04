@@ -7,8 +7,8 @@ import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { GroupsList } from '@/components/dashboard/groups-list';
 import { WinnerHistory } from '@/components/dashboard/winner-history';
 import { RealTimeClock } from '@/components/dashboard/real-time-clock';
-import { useUser } from '@/firebase';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { useUser, useAuth } from '@/firebase';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,12 +18,20 @@ import { useToast } from '@/hooks/use-toast';
 
 const AuthForm = () => {
     const { toast } = useToast();
-    const auth = getAuth();
+    const auth = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleAuth = async (isSignUp: boolean) => {
+        if (!auth) {
+            toast({
+                title: "Kesalahan Inisialisasi",
+                description: "Layanan otentikasi belum siap. Silakan coba lagi nanti.",
+                variant: "destructive",
+            });
+            return;
+        }
         setLoading(true);
         try {
             if (isSignUp) {
