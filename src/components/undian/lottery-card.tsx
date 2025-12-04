@@ -24,9 +24,11 @@ import {
 import { Trophy, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { format, getMonth, getYear } from 'date-fns';
+import { format } from 'date-fns';
 import { useFirestore } from '@/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface LotteryCardProps {
     group: Group;
@@ -53,7 +55,7 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
   const groupMembers = members.filter(m => group.memberIds.includes(m.id));
   const winnerIds = group.winnerHistory?.map(wh => wh.memberId) || [];
 
-  const handleDrawWinner = async () => {
+  const handleDrawWinner = () => {
     if (!db) return;
 
     const eligibleMembers = members.filter(m => group.memberIds.includes(m.id) && !winnerIds.includes(m.id));
@@ -71,36 +73,36 @@ export function LotteryCard({ group, title, description, buttonText }: LotteryCa
     const randomIndex = Math.floor(Math.random() * eligibleMembers.length);
     const newWinner = eligibleMembers[randomIndex];
 
-    setTimeout(async () => {
+    setTimeout(() => {
       setDrawnWinner(newWinner);
       
       const groupRef = doc(db, 'groups', group.id);
       const drawMonth = format(new Date(), 'yyyy-MM-dd');
       const newWinnerHistory = [...(group.winnerHistory || []), { month: drawMonth, memberId: newWinner.id }];
       
-      try {
-        await updateDoc(groupRef, {
-            currentWinnerId: newWinner.id,
-            winnerHistory: newWinnerHistory
-        });
+      const dataToUpdate = {
+        currentWinnerId: newWinner.id,
+        winnerHistory: newWinnerHistory
+      };
 
-        setIsDrawing(false);
-        setShowWinnerDialog(true);
-
-        toast({
-          title: "🎉 Penarik Baru Telah Diundi! 🎉",
-          description: `Selamat kepada ${newWinner.name}!`,
+      updateDoc(groupRef, dataToUpdate)
+        .then(() => {
+            setIsDrawing(false);
+            setShowWinnerDialog(true);
+            toast({
+              title: "🎉 Penarik Baru Telah Diundi! 🎉",
+              description: `Selamat kepada ${newWinner.name}!`,
+            });
+        })
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: groupRef.path,
+                operation: 'update',
+                requestResourceData: dataToUpdate
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setIsDrawing(false);
         });
-
-      } catch (error) {
-        console.error("Error updating winner:", error);
-        toast({
-            title: "Gagal Mengundi",
-            description: "Terjadi kesalahan saat menyimpan pemenang baru.",
-            variant: "destructive",
-        });
-        setIsDrawing(false);
-      }
     }, 2000);
   };
 

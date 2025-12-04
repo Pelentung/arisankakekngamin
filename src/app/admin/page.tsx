@@ -17,8 +17,10 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, Firestore } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -53,6 +55,13 @@ export default function AdminPage() {
           others: [{ id: 'other1', description: 'Iuran Lainnya', amount: 0 }],
         });
       }
+    },
+    (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
     });
     return () => unsubscribe();
   }, [db]);
@@ -108,22 +117,25 @@ export default function AdminPage() {
     setSettings(prev => prev ? ({...prev, others: newOthers}) : null);
   }
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!db || !settings) return;
-    try {
-        await setDoc(doc(db, "contributionSettings", "default"), settings);
-        toast({
-            title: "Pengaturan Disimpan",
-            description: "Nominal iuran telah berhasil diperbarui di Firestore."
-        })
-    } catch (error) {
-        console.error("Error saving settings: ", error);
-        toast({
-            title: "Gagal Menyimpan",
-            description: "Terjadi kesalahan saat menyimpan pengaturan.",
-            variant: "destructive"
-        })
-    }
+    const docRef = doc(db, "contributionSettings", "default");
+    
+    setDoc(docRef, settings)
+      .then(() => {
+          toast({
+              title: "Pengaturan Disimpan",
+              description: "Nominal iuran telah berhasil diperbarui di Firestore."
+          })
+      })
+      .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+              path: docRef.path,
+              operation: 'write',
+              requestResourceData: settings,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const fixedContributions: {key: keyof Omit<ContributionSettings, 'others'>, label: string}[] = [

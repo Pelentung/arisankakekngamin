@@ -27,7 +27,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore } from '@/firebase';
-import { doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 type PaymentDetail = DetailedPayment & { member?: Member };
 type ContributionType = keyof Omit<ContributionSettings, 'others'> | string;
@@ -306,25 +308,39 @@ export default function PaymentPage() {
   const saveAllChanges = async () => {
     if (!db) return;
     const batch = writeBatch(db);
-    localChanges.forEach(payment => {
+    const changesToSave = localChanges.filter(local => 
+        allPayments.some(original => original.id === local.id && JSON.stringify(original) !== JSON.stringify(local))
+    );
+
+    if (changesToSave.length === 0) {
+        toast({
+            title: "Tidak Ada Perubahan",
+            description: "Tidak ada perubahan yang perlu disimpan.",
+        });
+        return;
+    }
+
+    changesToSave.forEach(payment => {
         const docRef = doc(db, "payments", payment.id);
-        batch.update(docRef, { contributions: payment.contributions, status: payment.status });
+        const { id, member, ...paymentData } = payment; // Exclude client-side only 'member' property
+        batch.update(docRef, paymentData);
     });
     
-    try {
-        await batch.commit();
-        toast({
-            title: "Perubahan Disimpan",
-            description: "Semua status pembayaran telah disimpan di Firestore."
+    batch.commit()
+        .then(() => {
+            toast({
+                title: "Perubahan Disimpan",
+                description: "Semua status pembayaran telah disimpan di Firestore."
+            })
         })
-    } catch (error) {
-        console.error("Error saving changes: ", error);
-        toast({
-            title: "Gagal Menyimpan",
-            description: "Terjadi kesalahan saat menyimpan perubahan.",
-            variant: "destructive"
-        })
-    }
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: 'payments (batch operation)',
+                operation: 'write',
+                requestResourceData: changesToSave.map(p => ({id: p.id, data: p}))
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
   }
 
   return (

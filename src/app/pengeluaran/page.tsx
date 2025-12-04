@@ -47,6 +47,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useFirestore } from '@/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const ExpenseDialog = ({
   expense,
@@ -178,42 +180,56 @@ export default function ExpensesPage() {
     setIsDialogOpen(true);
   };
   
-  const handleDelete = async (expenseId: string) => {
+  const handleDelete = (expenseId: string) => {
     if (!db) return;
-    try {
-        await deleteDoc(doc(db, 'expenses', expenseId));
-        toast({
-            title: "Pengeluaran Dihapus",
-            description: "Data pengeluaran telah berhasil dihapus.",
+    const docRef = doc(db, 'expenses', expenseId);
+    deleteDoc(docRef)
+        .then(() => {
+            toast({
+                title: "Pengeluaran Dihapus",
+                description: "Data pengeluaran telah berhasil dihapus.",
+            });
+        })
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
-    } catch (error) {
-        console.error("Error deleting expense:", error);
-        toast({
-            title: "Gagal Menghapus",
-            description: "Terjadi kesalahan saat menghapus pengeluaran.",
-            variant: "destructive",
-        });
-    }
   };
 
-  const handleSave = async (expenseData: Omit<Expense, 'id'>, id?: string) => {
+  const handleSave = (expenseData: Omit<Expense, 'id'>, id?: string) => {
     if (!db) return;
-    try {
-        if (id) {
-            await updateDoc(doc(db, 'expenses', id), expenseData);
-            toast({ title: "Pengeluaran Diperbarui", description: "Data pengeluaran telah diperbarui." });
-        } else {
-            await addDoc(collection(db, 'expenses'), expenseData);
-            toast({ title: "Pengeluaran Ditambahkan", description: "Data pengeluaran baru telah ditambahkan." });
-        }
-        setIsDialogOpen(false);
-    } catch (error) {
-        console.error("Error saving expense:", error);
-        toast({
-            title: "Gagal Menyimpan",
-            description: "Terjadi kesalahan saat menyimpan pengeluaran.",
-            variant: "destructive",
-        });
+    if (id) {
+        const docRef = doc(db, 'expenses', id);
+        updateDoc(docRef, expenseData)
+            .then(() => {
+                toast({ title: "Pengeluaran Diperbarui", description: "Data pengeluaran telah diperbarui." });
+                setIsDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'update',
+                    requestResourceData: expenseData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    } else {
+        addDoc(collection(db, 'expenses'), expenseData)
+            .then(() => {
+                toast({ title: "Pengeluaran Ditambahkan", description: "Data pengeluaran baru telah ditambahkan." });
+                setIsDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'expenses',
+                    operation: 'create',
+                    requestResourceData: expenseData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     }
   };
 

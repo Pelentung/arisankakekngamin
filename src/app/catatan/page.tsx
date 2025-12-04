@@ -35,8 +35,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, Firestore } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const NoteDialog = ({
   note,
@@ -138,53 +140,69 @@ export default function NotesPage() {
     setIsDialogOpen(true);
   };
   
-  const handleDelete = async (noteId: string) => {
+  const handleDelete = (noteId: string) => {
     if (!db) return;
-    try {
-        await deleteDoc(doc(db, "notes", noteId));
-        toast({
-            title: "Catatan Dihapus",
-            description: "Catatan telah berhasil dihapus.",
+    const docRef = doc(db, "notes", noteId);
+    deleteDoc(docRef)
+        .then(() => {
+            toast({
+                title: "Catatan Dihapus",
+                description: "Catatan telah berhasil dihapus.",
+            });
+        })
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
-    } catch (error) {
-        console.error("Error deleting note: ", error);
-        toast({
-            title: "Gagal Menghapus",
-            description: "Terjadi kesalahan saat menghapus catatan.",
-            variant: "destructive",
-        });
-    }
   };
 
-  const handleSave = async (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+  const handleSave = (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     if (!db) return;
     const { id, ...noteData } = note;
-    try {
-        if (id) {
-            // Update existing note
-            const noteRef = doc(db, "notes", id);
-            await updateDoc(noteRef, {
-                ...noteData,
-                updatedAt: serverTimestamp()
+    
+    if (id) {
+        // Update existing note
+        const noteRef = doc(db, "notes", id);
+        const dataToUpdate = {
+            ...noteData,
+            updatedAt: serverTimestamp()
+        };
+        updateDoc(noteRef, dataToUpdate)
+            .then(() => {
+                toast({ title: "Catatan Diperbarui", description: "Catatan telah diperbarui." });
+                setIsDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: noteRef.path,
+                    operation: 'update',
+                    requestResourceData: dataToUpdate,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            toast({ title: "Catatan Diperbarui", description: "Catatan telah diperbarui." });
-        } else {
-            // Add new note
-            await addDoc(collection(db, "notes"), {
-                ...noteData,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
+    } else {
+        // Add new note
+        const dataToCreate = {
+            ...noteData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+        addDoc(collection(db, "notes"), dataToCreate)
+            .then(() => {
+                toast({ title: "Catatan Ditambahkan", description: "Catatan baru telah disimpan." });
+                setIsDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'notes',
+                    operation: 'create',
+                    requestResourceData: dataToCreate,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            toast({ title: "Catatan Ditambahkan", description: "Catatan baru telah disimpan." });
-        }
-        setIsDialogOpen(false);
-    } catch (error) {
-        console.error("Error saving note: ", error);
-        toast({
-            title: "Gagal Menyimpan",
-            description: "Terjadi kesalahan saat menyimpan catatan.",
-            variant: "destructive",
-        });
     }
   };
 

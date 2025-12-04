@@ -52,7 +52,9 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFirestore } from '@/firebase';
-import { collection, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, writeBatch } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // Dialog for Adding/Editing a single member
 const MemberDialog = ({
@@ -291,106 +293,120 @@ export default function ManageGroupsAndMembersPage() {
 
   const handleDeleteMember = async (memberId: string) => {
     if (!db) return;
+    const batch = writeBatch(db);
     
     // First, remove the member from all groups that contain them
-    const batch = [];
     for (const group of groups) {
       if (group.memberIds.includes(memberId)) {
         const groupRef = doc(db, 'groups', group.id);
-        batch.push(updateDoc(groupRef, { memberIds: arrayRemove(memberId) }));
+        batch.update(groupRef, { memberIds: arrayRemove(memberId) });
       }
     }
     
-    try {
-        await Promise.all(batch);
-        // After removing from groups, delete the member document
-        await deleteDoc(doc(db, 'members', memberId));
+    const memberRef = doc(db, 'members', memberId);
+    batch.delete(memberRef);
+
+    batch.commit()
+      .then(() => {
         toast({
           title: 'Anggota Dihapus',
           description: 'Anggota telah berhasil dihapus dari daftar dan semua grup.',
         });
-    } catch (error) {
-        console.error("Error deleting member:", error);
-        toast({
-            title: 'Gagal Menghapus',
-            description: 'Terjadi kesalahan saat menghapus anggota.',
-            variant: 'destructive',
-        });
-    }
+      })
+      .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+              path: `members/${memberId} and groups`,
+              operation: 'delete',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const handleSaveMember = async (memberData: Omit<Member, 'id'>, id?: string) => {
     if (!db) return;
-    try {
-        if (id) {
-            // Update existing member
-            await updateDoc(doc(db, 'members', id), memberData);
-            toast({
-                title: 'Anggota Diperbarui',
-                description: `Data untuk ${memberData.name} telah diperbarui.`,
+    if (id) {
+        const memberRef = doc(db, 'members', id);
+        updateDoc(memberRef, memberData)
+            .then(() => {
+                toast({
+                    title: 'Anggota Diperbarui',
+                    description: `Data untuk ${memberData.name} telah diperbarui.`,
+                });
+                setIsMemberDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: memberRef.path,
+                    operation: 'update',
+                    requestResourceData: memberData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        } else {
-            // Add new member
-            await addDoc(collection(db, 'members'), memberData);
-            toast({
-                title: 'Anggota Ditambahkan',
-                description: `${memberData.name} telah ditambahkan.`,
+    } else {
+        addDoc(collection(db, 'members'), memberData)
+            .then(() => {
+                toast({
+                    title: 'Anggota Ditambahkan',
+                    description: `${memberData.name} telah ditambahkan.`,
+                });
+                setIsMemberDialogOpen(false);
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'members',
+                    operation: 'create',
+                    requestResourceData: memberData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
-        setIsMemberDialogOpen(false);
-    } catch(error) {
-        console.error("Error saving member:", error);
-        toast({
-            title: 'Gagal Menyimpan',
-            description: 'Terjadi kesalahan saat menyimpan data anggota.',
-            variant: 'destructive',
-        });
     }
   };
   
   const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
     if (!db) return;
-    try {
-        const groupRef = doc(db, 'groups', groupId);
-        await updateDoc(groupRef, {
-            memberIds: arrayUnion(memberId)
-        });
+    const groupRef = doc(db, 'groups', groupId);
+    updateDoc(groupRef, {
+        memberIds: arrayUnion(memberId)
+    })
+    .then(() => {
         const member = members.find(m => m.id === memberId);
         const group = groups.find(g => g.id === groupId);
         toast({
           title: 'Anggota Ditambahkan',
           description: `${member?.name} telah berhasil ditambahkan ke ${group?.name}.`,
         });
-    } catch (error) {
-        console.error("Error adding member to group:", error);
-        toast({
-            title: 'Gagal Menambahkan',
-            description: 'Terjadi kesalahan saat menambahkan anggota ke grup.',
-            variant: 'destructive',
+    })
+    .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: groupRef.path,
+            operation: 'update',
+            requestResourceData: { memberIds: arrayUnion(memberId) },
         });
-    }
+        errorEmitter.emit('permission-error', permissionError);
+    });
   }
 
   // Handler for removing a member from a specific group
   const handleRemoveFromGroup = async (groupId: string, memberId: string) => {
     if (!db) return;
-    try {
-        const groupRef = doc(db, 'groups', groupId);
-        await updateDoc(groupRef, {
-            memberIds: arrayRemove(memberId)
-        });
+    const groupRef = doc(db, 'groups', groupId);
+    updateDoc(groupRef, {
+        memberIds: arrayRemove(memberId)
+    })
+    .then(() => {
         toast({
             title: "Anggota Dihapus dari Grup",
             description: "Anggota telah dikeluarkan dari grup ini."
         });
-    } catch (error) {
-        console.error("Error removing member from group:", error);
-        toast({
-            title: 'Gagal Menghapus',
-            description: 'Terjadi kesalahan saat mengeluarkan anggota dari grup.',
-            variant: 'destructive',
+    })
+    .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: groupRef.path,
+            operation: 'update',
+            requestResourceData: { memberIds: arrayRemove(memberId) },
         });
-    }
+        errorEmitter.emit('permission-error', permissionError);
+    });
   }
 
   return (
