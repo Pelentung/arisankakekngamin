@@ -27,9 +27,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore } from '@/firebase';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 type PaymentDetail = DetailedPayment & { member?: Member };
 type ContributionType = keyof DetailedPayment['contributions'];
@@ -177,11 +178,14 @@ export default function PaymentPage() {
 
   const [localChanges, setLocalChanges] = useState<DetailedPayment[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
 
   const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
 
+  // Data fetching
   useEffect(() => {
     if (!db) return;
+    setIsLoading(true);
     const unsubPayments = subscribeToData(db, 'payments', (data) => {
       setAllPayments(data as DetailedPayment[]);
       setLocalChanges(data as DetailedPayment[]); 
@@ -190,20 +194,23 @@ export default function PaymentPage() {
     const unsubGroups = subscribeToData(db, 'groups', (data) => {
       const groups = data as Group[];
       setAllGroups(groups);
-      // Set default selected group to "Arisan Utama" if it exists
       if (!selectedGroup) {
         const mainGroup = groups.find(g => g.name === 'Arisan Utama');
-        if (mainGroup) {
-          setSelectedGroup(mainGroup.id);
-        } else if (groups.length > 0) {
-          setSelectedGroup(groups[0].id);
-        }
+        if (mainGroup) setSelectedGroup(mainGroup.id);
+        else if (groups.length > 0) setSelectedGroup(groups[0].id);
       }
     });
     const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => {
-        if (data.length > 0) {
-            setContributionSettings(data[0] as ContributionSettings);
-        }
+        if (data.length > 0) setContributionSettings(data[0] as ContributionSettings);
+    });
+
+    Promise.all([
+        new Promise(resolve => { const unsub = subscribeToData(db, 'payments', d => { setAllPayments(d as any); resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'members', d => { setAllMembers(d as any); resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'groups', d => { setAllGroups(d as any); resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'contributionSettings', d => { if(d.length > 0) setContributionSettings(d[0] as any); resolve(true); unsub(); }); }),
+    ]).then(() => {
+        setIsLoading(false);
     });
 
     return () => {
@@ -212,7 +219,82 @@ export default function PaymentPage() {
         unsubGroups();
         unsubSettings();
     }
-  }, [db]); // remove selectedGroup from dependency array
+  }, [db]);
+
+  // Automatic payment record generation
+  useEffect(() => {
+    const generateMonthlyPayments = async () => {
+        if (!db || allGroups.length === 0 || allMembers.length === 0 || !contributionSettings) return;
+
+        const currentMonth = format(new Date(), 'yyyy-MM');
+        const dueDate = endOfMonth(new Date()).toISOString();
+
+        const paymentsQuery = query(collection(db, 'payments'), where('dueDate', '>=', startOfMonth(new Date()).toISOString()));
+        const querySnapshot = await getDocs(paymentsQuery);
+        const existingPayments = new Set(querySnapshot.docs.map(doc => `${doc.data().memberId}-${doc.data().groupId}-${format(new Date(doc.data().dueDate), 'yyyy-MM')}`));
+
+        const batch = writeBatch(db);
+        let newPaymentsCount = 0;
+
+        allGroups.forEach(group => {
+            group.memberIds.forEach(memberId => {
+                const paymentKey = `${memberId}-${group.id}-${currentMonth}`;
+
+                if (!existingPayments.has(paymentKey)) {
+                    let contributions: any = {};
+                    let totalAmount = 0;
+
+                    if (group.id === mainArisanGroup?.id) {
+                        contributions.main = { amount: contributionSettings.main, paid: false };
+                        contributions.cash = { amount: contributionSettings.cash, paid: false };
+                        contributions.sick = { amount: contributionSettings.sick, paid: false };
+                        contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
+                        contributionSettings.others.forEach(other => {
+                            contributions[other.id] = { amount: other.amount, paid: false };
+                        });
+                        totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
+                    } else {
+                        totalAmount = group.contributionAmount;
+                        contributions.main = { amount: totalAmount, paid: false };
+                    }
+                    
+                    const newPaymentDoc = doc(collection(db, 'payments'));
+                    batch.set(newPaymentDoc, {
+                        memberId,
+                        groupId: group.id,
+                        dueDate,
+                        contributions,
+                        totalAmount,
+                        status: 'Unpaid',
+                    });
+                    newPaymentsCount++;
+                }
+            });
+        });
+        
+        if (newPaymentsCount > 0) {
+            await batch.commit().then(() => {
+                toast({
+                    title: "Catatan Pembayaran Dibuat",
+                    description: `${newPaymentsCount} catatan pembayaran baru untuk bulan ini telah dibuat.`,
+                });
+            }).catch(serverError => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'payments (batch create)',
+                    operation: 'create',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+        }
+    };
+    
+    // Run generation only when all data is loaded
+    if(!isLoading) {
+        generateMonthlyPayments();
+    }
+
+  }, [isLoading, db, allGroups, allMembers, contributionSettings, mainArisanGroup, toast]);
+
 
   const contributionLabels = useMemo(() => {
     if (!contributionSettings) return {};
@@ -229,14 +311,16 @@ export default function PaymentPage() {
   }, [contributionSettings]);
 
   const calculatePaymentDetails = useCallback((payment: DetailedPayment): DetailedPayment => {
-    if (!contributionSettings || !mainArisanGroup) {
-        return payment;
-    }
+    if (!contributionSettings) return payment;
+    
+    let group = allGroups.find(g => g.id === payment.groupId);
+    if (!group) return payment;
 
-    if (payment.groupId !== mainArisanGroup.id) {
-        const group = allGroups.find(g => g.id === payment.groupId);
-        const totalAmount = group ? group.contributionAmount : 0;
-        const contributions = { main: { amount: totalAmount, paid: payment.status === 'Paid' } };
+    // For non-main groups, the logic is simple.
+    if (group.id !== mainArisanGroup?.id) {
+        const totalAmount = group.contributionAmount;
+        const paid = payment.status === 'Paid';
+        const contributions = { main: { amount: totalAmount, paid } };
         return {
             ...payment,
             totalAmount,
@@ -247,17 +331,14 @@ export default function PaymentPage() {
     // For the main group, calculate everything dynamically based on settings
     const updatedContributions: DetailedPayment['contributions'] = JSON.parse(JSON.stringify(payment.contributions));
 
-    updatedContributions.main.amount = contributionSettings.main;
-    updatedContributions.cash.amount = contributionSettings.cash;
-    updatedContributions.sick.amount = contributionSettings.sick;
-    updatedContributions.bereavement.amount = contributionSettings.bereavement;
+    updatedContributions.main = { ...updatedContributions.main, amount: contributionSettings.main };
+    updatedContributions.cash = { ...updatedContributions.cash, amount: contributionSettings.cash };
+    updatedContributions.sick = { ...updatedContributions.sick, amount: contributionSettings.sick };
+    updatedContributions.bereavement = { ...updatedContributions.bereavement, amount: contributionSettings.bereavement };
 
     contributionSettings.others.forEach(other => {
-        if (!updatedContributions[other.id]) {
-             updatedContributions[other.id] = { amount: other.amount, paid: false };
-        } else {
-             updatedContributions[other.id].amount = other.amount;
-        }
+        const existing = updatedContributions[other.id];
+        updatedContributions[other.id] = { amount: other.amount, paid: existing?.paid ?? false };
     });
     
     let allPaid = true;
@@ -266,7 +347,9 @@ export default function PaymentPage() {
     for (const key in updatedContributions) {
       const type = key as ContributionType;
       const contribution = updatedContributions[type];
-      if (contribution) {
+      const settingsAmount = key === 'main' ? contributionSettings.main : key === 'cash' ? contributionSettings.cash : key === 'sick' ? contributionSettings.sick : key === 'bereavement' ? contributionSettings.bereavement : contributionSettings.others.find(o => o.id === key)?.amount;
+      
+      if (contribution && typeof settingsAmount === 'number') {
         totalAmount += contribution.amount;
         if (contribution.amount > 0 && !contribution.paid) {
             allPaid = false;
@@ -285,13 +368,10 @@ export default function PaymentPage() {
         if (p.id === paymentId) {
           const updatedPayment = { ...p };
           if (!updatedPayment.contributions[contributionType]) {
-            // This case should ideally not happen if data is seeded correctly, but as a fallback:
              updatedPayment.contributions[contributionType] = { amount: 0, paid: isPaid };
           } else {
             updatedPayment.contributions[contributionType].paid = isPaid;
           }
-          
-          // Recalculate status and total based on the new paid status
           return calculatePaymentDetails(updatedPayment);
         }
         return p;
@@ -304,15 +384,12 @@ export default function PaymentPage() {
         if (p.id === paymentId) {
             const allPaid = newStatus === 'Paid';
             const updatedContributions: DetailedPayment['contributions'] = JSON.parse(JSON.stringify(p.contributions));
-            
-            // Mark all underlying contributions as paid or unpaid
             for (const key in updatedContributions) {
                 const type = key as ContributionType;
                 if(updatedContributions[type]) {
                     updatedContributions[type].paid = allPaid;
                 }
             }
-            
             return { ...p, status: newStatus, contributions: updatedContributions };
         }
         return p;
@@ -320,11 +397,14 @@ export default function PaymentPage() {
   }
   
   const filteredPayments = useMemo(() => {
+    const currentMonthStart = startOfMonth(new Date());
     return localChanges
-      .filter(p => p.groupId === selectedGroup)
+      .filter(p => {
+        const paymentDate = new Date(p.dueDate);
+        return p.groupId === selectedGroup && paymentDate >= currentMonthStart;
+      })
       .map(p => {
           const member = allMembers.find(m => m.id === p.memberId);
-          // Recalculate details for display, ensuring it reflects local changes
           const detailedPayment = calculatePaymentDetails(p);
           return {
               ...detailedPayment,
@@ -351,7 +431,7 @@ export default function PaymentPage() {
 
     changesToSave.forEach(payment => {
         const docRef = doc(db, "payments", payment.id);
-        const { id, member, ...paymentData } = payment; // Exclude client-side only 'member' property
+        const { id, member, ...paymentData } = payment;
         batch.update(docRef, paymentData);
     });
     
@@ -379,7 +459,7 @@ export default function PaymentPage() {
         <Card>
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Transaksi Pembayaran</CardTitle>
+              <CardTitle>Transaksi Pembayaran Bulan Ini</CardTitle>
               <CardDescription>
                 Kelola status pembayaran untuk grup arisan yang dipilih.
               </CardDescription>
@@ -401,9 +481,9 @@ export default function PaymentPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {!contributionSettings || !mainArisanGroup ? (
+            {isLoading || !contributionSettings || !mainArisanGroup ? (
                  <div className="text-center text-muted-foreground py-8">
-                    Memuat pengaturan...
+                    Memuat dan menyiapkan catatan pembayaran...
                 </div>
             ) : filteredPayments.length > 0 ? (
                 selectedGroup === mainArisanGroup.id ? (
@@ -413,7 +493,7 @@ export default function PaymentPage() {
                 )
             ) : (
                 <div className="text-center text-muted-foreground py-8">
-                    Tidak ada data pembayaran untuk grup ini.
+                    Tidak ada data pembayaran untuk grup dan bulan ini.
                 </div>
             )}
           </CardContent>
@@ -422,3 +502,5 @@ export default function PaymentPage() {
     </div>
   );
 }
+
+    
