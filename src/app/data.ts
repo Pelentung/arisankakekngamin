@@ -1,5 +1,7 @@
 
 import { collection, onSnapshot, query, Firestore } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export interface Member {
   id: string;
@@ -94,10 +96,12 @@ export const subscribeToData = (db: Firestore, collectionName: string, callback:
         });
         callback(data);
     }, 
-    (error) => {
-      // Re-throwing the error to let it be caught by a global handler or the browser.
-      // This is often better for debugging during development.
-      throw error;
+    (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: collectionName,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
     });
     return unsubscribe;
 };
