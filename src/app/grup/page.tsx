@@ -30,8 +30,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, PlusCircle, UserPlus, Users } from 'lucide-react';
-import { format } from 'date-fns';
-import { id } from 'date-fns/locale';
 import {
   Dialog,
   DialogContent,
@@ -227,6 +225,13 @@ const AddMemberToGroupDialog = ({
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedMemberId('');
+      setSelectedGroupId('');
+    }
+  }, [isOpen]);
 
   const handleSave = () => {
     if (!selectedMemberId || !selectedGroupId) {
