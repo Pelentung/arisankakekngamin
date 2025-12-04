@@ -558,8 +558,9 @@ export default function ManageGroupsAndMembersPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Anggota</TableHead>
-                        <TableHead>Tanggal Bergabung</TableHead>
+                        <TableHead className="w-[250px]">Anggota</TableHead>
+                        <TableHead>Alamat</TableHead>
+                        <TableHead>Nomor HP</TableHead>
                         <TableHead className="text-right">Tindakan</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -580,11 +581,8 @@ export default function ManageGroupsAndMembersPage() {
                               <div className="font-medium">{member.name}</div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {format(new Date(member.joinedDate), 'd MMMM yyyy', {
-                              locale: id,
-                            })}
-                          </TableCell>
+                          <TableCell className="max-w-[300px] truncate">{member.address}</TableCell>
+                          <TableCell>{member.phone}</TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -639,5 +637,3 @@ export default function ManageGroupsAndMembersPage() {
     </>
   );
 }
-
-    
