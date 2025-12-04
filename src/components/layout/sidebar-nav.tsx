@@ -46,6 +46,10 @@ export function SidebarNav() {
   const auth = useAuth();
   const { user } = useUser();
 
+  if (!user) {
+    return null; // Do not render sidebar if user is not logged in
+  }
+
   const navItems = allNavItems.filter(item => !item.adminOnly || user?.isAdmin);
 
   const isNavItemActive = (href: string) => {
@@ -58,10 +62,6 @@ export function SidebarNav() {
     await auth.signOut();
     router.push('/');
   };
-
-  if (!user) {
-    return null; // Don't render sidebar if user is not logged in
-  }
 
   return (
     <>
