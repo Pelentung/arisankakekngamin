@@ -5,6 +5,7 @@ import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar'
 import { SidebarNav } from '@/components/layout/sidebar-nav';
 import { Toaster } from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export const metadata: Metadata = {
   title: 'Arisan Alm. Kakek Ngamin',
@@ -35,6 +36,7 @@ export default function RootLayout({
               <SidebarInset>{children}</SidebarInset>
             </SidebarProvider>
             <Toaster />
+            <FirebaseErrorListener />
         </FirebaseClientProvider>
       </body>
     </html>
