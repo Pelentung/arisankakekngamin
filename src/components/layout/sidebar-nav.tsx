@@ -18,8 +18,7 @@ import { Separator } from '../ui/separator';
 const navItems = [
   { href: '/', label: 'Menu Utama', icon: LayoutDashboard },
   { href: '/laporan', label: 'Laporan', icon: FileText },
-  { href: '/grup/anggota', label: 'Anggota Grup', icon: Users },
-  { href: '/grup', label: 'Kelola Grup', icon: Users },
+  { href: '/grup', label: 'Kelola Grup & Anggota', icon: Users },
   { href: '/pembayaran', label: 'Pembayaran', icon: Coins },
   { href: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
   { href: '/undian', label: 'Undian Tarikan', icon: Trophy },
@@ -35,9 +34,9 @@ export function SidebarNav() {
     if (href === '/') {
       return pathname === '/';
     }
-    // Exact match for /grup to avoid conflict with /grup/anggota
+    // Specific match for /grup to avoid it being active on /grup/* sub-routes if we add them later
     if (href === '/grup') {
-        return pathname === '/grup';
+        return pathname === '/grup' || pathname.startsWith('/grup/anggota');
     }
     // StartsWith for all other nested routes
     return pathname.startsWith(href);
