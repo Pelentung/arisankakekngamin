@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { User as FirebaseAuthUser } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDocs, collection, query, limit } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 export interface User extends FirebaseAuthUser {
   isAdmin?: boolean;
@@ -25,37 +25,47 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth || !db) {
+        setLoading(false);
+        return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         
-        const unsubSnapshot = onSnapshot(userRef, async (docSnap) => {
+        // Always try to set/update user document on auth state change.
+        // This handles new user creation and keeps data fresh.
+        // Using { merge: true } is idempotent and safe.
+        const isAdminByEmail = firebaseUser.email === 'adminarisan@gmail.com';
+        const userProfileData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            isAdmin: isAdminByEmail,
+        };
+
+        try {
+            // This will create the document if it doesn't exist, 
+            // or update it if it does. No need to check for existence first.
+            await setDoc(userRef, userProfileData, { merge: true });
+        } catch (error) {
+            console.error("Error writing user profile:", error);
+        }
+
+        const unsubSnapshot = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data();
             setUser({ ...firebaseUser, ...userData });
-            setLoading(false);
           } else {
-            // New user, assign admin role based on email
-            const isAdminByEmail = firebaseUser.email === 'adminarisan@gmail.com';
-
-            const newUserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName,
-              isAdmin: isAdminByEmail,
-            };
-            try {
-              await setDoc(userRef, newUserProfile);
-              setUser({ ...firebaseUser, ...newUserProfile });
-            } catch (error) {
-              console.error("Error creating user profile:", error);
-              setUser(firebaseUser); // Fallback to auth user
-            }
-            setLoading(false);
+            // Fallback to the data we just tried to write if snapshot is slow
+            setUser({ ...firebaseUser, ...userProfileData });
           }
+          setLoading(false);
         }, (error) => {
             console.error("Error in user snapshot listener:", error);
+            // Fallback to auth user if snapshot fails
+            setUser(firebaseUser); 
             setLoading(false);
         });
 
