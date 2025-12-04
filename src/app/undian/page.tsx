@@ -15,14 +15,16 @@ export default function UndianPage() {
   useEffect(() => {
     if (!db) return;
     const unsubscribe = subscribeToData(db, 'groups', (data) => {
-        setGroups(data as Group[]);
+        // Sort groups by name to ensure consistent order
+        const sortedData = (data as Group[]).sort((a, b) => a.name.localeCompare(b.name));
+        setGroups(sortedData);
     });
     return () => unsubscribe();
   }, [db]);
     
-  const groupMain = groups.find(g => g.id === 'g1');
-  const group10k = groups.find(g => g.id === 'g2');
-  const group20k = groups.find(g => g.id === 'g1'); // Re-using g1 for demo as there isn't a separate 20k group
+  const groupMain = groups.find(g => g.name === 'Arisan Utama');
+  const group10k = groups.find(g => g.name === 'Arisan Uang Kaget Rp. 10.000');
+  const group20k = groups.find(g => g.name === 'Arisan Uang Kaget Rp. 20.000');
   
   return (
     <div className="flex flex-col min-h-screen">
@@ -62,3 +64,5 @@ export default function UndianPage() {
     </div>
   );
 }
+
+    

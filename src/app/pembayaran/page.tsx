@@ -161,7 +161,7 @@ export default function PaymentPage() {
   const [contributionSettings, setContributionSettings] = useState<ContributionSettings | null>(null);
 
   const [localChanges, setLocalChanges] = useState<DetailedPayment[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState('g3'); // Default to 'Grup Arisan Utama'
+  const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!db) return;
@@ -170,7 +170,19 @@ export default function PaymentPage() {
       setLocalChanges(data as DetailedPayment[]); 
     });
     const unsubMembers = subscribeToData(db, 'members', (data) => setAllMembers(data as Member[]));
-    const unsubGroups = subscribeToData(db, 'groups', (data) => setAllGroups(data as Group[]));
+    const unsubGroups = subscribeToData(db, 'groups', (data) => {
+      const groups = data as Group[];
+      setAllGroups(groups);
+      // Set default selected group to "Arisan Utama" if it exists
+      if (!selectedGroup) {
+        const mainGroup = groups.find(g => g.name === 'Arisan Utama');
+        if (mainGroup) {
+          setSelectedGroup(mainGroup.id);
+        } else if (groups.length > 0) {
+          setSelectedGroup(groups[0].id);
+        }
+      }
+    });
     const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => {
         if (data.length > 0) {
             setContributionSettings(data[0] as ContributionSettings);
@@ -183,7 +195,7 @@ export default function PaymentPage() {
         unsubGroups();
         unsubSettings();
     }
-  }, [db]);
+  }, [db, selectedGroup]);
 
 
   const contributionLabels = useMemo(() => {
@@ -199,13 +211,15 @@ export default function PaymentPage() {
     });
     return labels;
   }, [contributionSettings]);
+  
+  const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
 
   const calculatePaymentDetails = useCallback((payment: DetailedPayment): { status: DetailedPayment['status'], totalAmount: number, contributions: DetailedPayment['contributions'] } => {
     if (!contributionSettings) {
         return { status: payment.status, totalAmount: payment.totalAmount, contributions: payment.contributions };
     }
 
-    if (payment.groupId !== 'g3') {
+    if (payment.groupId !== mainArisanGroup?.id) {
         // For non-main groups, total amount is fixed. Status depends on whether all contributions are paid.
         const allPaid = Object.values(payment.contributions).every(c => c.paid);
         return {
@@ -247,7 +261,7 @@ export default function PaymentPage() {
     const status: DetailedPayment['status'] = allPaid ? 'Paid' : 'Unpaid';
     
     return { status, totalAmount, contributions: updatedContributions };
-  }, [contributionSettings]);
+  }, [contributionSettings, mainArisanGroup]);
 
   const handleDetailedPaymentChange = (paymentId: string, contributionType: ContributionType, isPaid: boolean) => {
     setLocalChanges(prevPayments =>
@@ -373,7 +387,7 @@ export default function PaymentPage() {
           </CardHeader>
           <CardContent>
             {filteredPayments.length > 0 ? (
-                selectedGroup === 'g3' ? (
+                selectedGroup === mainArisanGroup?.id ? (
                     <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                 ) : (
                     <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
@@ -389,3 +403,5 @@ export default function PaymentPage() {
     </div>
   );
 }
+
+    
