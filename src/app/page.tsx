@@ -38,14 +38,12 @@ export default function HomePage() {
   const { auth } = initializeFirebase();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setIsLoading(false);
-      if (user) {
-        if (user.isAnonymous) {
+      if (currentUser) {
+        if (currentUser.isAnonymous) {
           router.push('/laporan');
-        } else {
-          // Stay on the main page to show AdminDashboard
         }
       }
     });
@@ -69,7 +67,7 @@ export default function HomePage() {
         title: 'Login Berhasil',
         description: 'Selamat datang kembali!',
       });
-      // onAuthStateChanged will handle the state update
+      // onAuthStateChanged will handle the state update and dashboard rendering
     } catch (error: any) {
       toast({
         title: 'Login Gagal',
@@ -110,13 +108,22 @@ export default function HomePage() {
     }
 
 
-  if (user) {
-    // If user is logged in, show the appropriate dashboard
-    // Guest users are redirected by the useEffect, so this will only show for regular users
+  if (user && !user.isAnonymous) {
+    // Regular user is logged in, show the admin dashboard
     return <AdminDashboard />;
   }
+  
+  if (user && user.isAnonymous) {
+    // This state is temporary while redirecting, show a loader
+     return (
+          <div className="flex min-h-screen items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className='ml-4'>Mengalihkan ke halaman laporan...</p>
+          </div>
+        );
+  }
 
-  // If no user, show the login form
+  // If no user, or if the user is anonymous and redirection hasn't happened yet, show the login form
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 flex flex-col items-center text-center">
@@ -201,5 +208,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    
