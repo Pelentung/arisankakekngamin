@@ -24,7 +24,7 @@ import { useFirestore } from '@/firebase';
 import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { MoreHorizontal, PlusCircle } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
@@ -301,6 +301,71 @@ export default function KeuanganPage() {
     return labels;
   }, [contributionSettings]);
 
+  const generatePaymentsForMonth = async () => {
+    if (!db || allGroups.length === 0 || allMembers.length === 0 || !contributionSettings) {
+        toast({ title: "Data Belum Siap", description: "Pastikan semua data anggota, grup, dan pengaturan sudah dimuat.", variant: "destructive" });
+        return;
+    }
+
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const targetDate = new Date(year, month);
+    const monthStr = format(targetDate, 'yyyy-MM');
+    const dueDate = endOfMonth(targetDate).toISOString();
+
+    const paymentsQuery = query(collection(db, 'payments'), 
+        where('dueDate', '>=', startOfMonth(targetDate).toISOString()),
+        where('dueDate', '<=', endOfMonth(targetDate).toISOString())
+    );
+
+    const querySnapshot = await getDocs(paymentsQuery);
+    const existingPayments = new Set(querySnapshot.docs.map(doc => `${doc.data().memberId}-${doc.data().groupId}`));
+    
+    const batch = writeBatch(db);
+    let newPaymentsCount = 0;
+
+    allGroups.forEach(group => {
+        group.memberIds.forEach(memberId => {
+            const paymentKey = `${memberId}-${group.id}`;
+            if (!existingPayments.has(paymentKey)) {
+                let contributions: any = {};
+                let totalAmount = 0;
+
+                if (group.id === mainArisanGroup?.id) {
+                    contributions.main = { amount: contributionSettings.main, paid: false };
+                    contributions.cash = { amount: contributionSettings.cash, paid: false };
+                    contributions.sick = { amount: contributionSettings.sick, paid: false };
+                    contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
+                    contributionSettings.others.forEach(other => {
+                        contributions[other.id] = { amount: other.amount, paid: false };
+                    });
+                    totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
+                } else {
+                    totalAmount = group.contributionAmount;
+                    contributions.main = { amount: totalAmount, paid: false };
+                }
+                
+                const newPaymentDoc = doc(collection(db, 'payments'));
+                batch.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
+                newPaymentsCount++;
+            }
+        });
+    });
+    
+    if (newPaymentsCount > 0) {
+        await batch.commit().then(() => {
+            toast({
+                title: "Catatan Iuran Dibuat",
+                description: `${newPaymentsCount} catatan iuran baru untuk ${format(targetDate, 'MMMM yyyy', {locale: id})} telah dibuat.`,
+            });
+        }).catch(serverError => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (batch create)', operation: 'create' }));
+        });
+    } else {
+        toast({ title: "Tidak Ada Catatan Baru", description: `Semua catatan iuran untuk bulan ${format(targetDate, 'MMMM yyyy', {locale: id})} sudah ada.` });
+    }
+  };
+
+
   // Payment handlers
   const handleDetailedPaymentChange = (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
     setLocalChanges(prev =>
@@ -429,7 +494,8 @@ export default function KeuanganPage() {
                                 <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                 <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                                <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan Iuran</Button>
+                                <Button onClick={generatePaymentsForMonth} variant="outline">Buat Catatan Iuran</Button>
+                                <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -440,7 +506,10 @@ export default function KeuanganPage() {
                                     <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
                                 )
                             ) : (
-                                <div className="text-center text-muted-foreground py-8">Tidak ada data pembayaran untuk grup dan bulan ini.</div>
+                                <div className="text-center text-muted-foreground py-8">
+                                    <p>Tidak ada data pembayaran untuk grup dan bulan ini.</p>
+                                    <p className="text-xs mt-2">Anda bisa membuat catatan iuran secara manual menggunakan tombol di atas.</p>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -484,3 +553,5 @@ export default function KeuanganPage() {
     </>
   );
 }
+
+    
