@@ -13,9 +13,9 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      // Check if the user is an admin by looking at their user document.
-      // This is safe because the rules for /users/{userId} are secure.
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Use custom claims for role-based access control.
+      // This is more secure and performant than reading a document.
+      return isSignedIn() && request.auth.token.isAdmin == true;
     }
 
     match /users/{userId} {
