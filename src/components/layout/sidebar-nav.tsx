@@ -2,7 +2,16 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Coins, LayoutDashboard, Shield, Trophy, Users, FileText, Receipt, StickyNote } from 'lucide-react';
+import {
+  Coins,
+  LayoutDashboard,
+  Shield,
+  Trophy,
+  Users,
+  FileText,
+  Receipt,
+  StickyNote,
+} from 'lucide-react';
 
 import {
   SidebarHeader,
@@ -34,9 +43,8 @@ export function SidebarNav() {
     if (href === '/') {
       return pathname === '/';
     }
-    // Specific match for /grup to avoid it being active on /grup/* sub-routes if we add them later
-    if (href === '/grup') {
-        return pathname === '/grup' || pathname.startsWith('/grup/anggota');
+     if (href === '/grup') {
+        return pathname === '/grup';
     }
     // StartsWith for all other nested routes
     return pathname.startsWith(href);
@@ -77,10 +85,14 @@ export function SidebarNav() {
         <Separator className="my-2" />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname === '/admin'} tooltip={'Admin'}>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === '/admin'}
+              tooltip={'Ketetapan Iuran'}
+            >
               <Link href="/admin">
                 <Shield />
-                <span>Admin</span>
+                <span>Ketetapan Iuran</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

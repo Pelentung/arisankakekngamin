@@ -69,7 +69,7 @@ export default function AdminPage() {
   if (!settings) {
     return (
         <div className="flex flex-col min-h-screen">
-          <Header title="Halaman Admin" />
+          <Header title="Ketetapan Iuran" />
           <main className="flex-1 p-4 md:p-6 flex items-center justify-center">
             <p>Loading settings...</p>
           </main>
@@ -121,13 +121,7 @@ export default function AdminPage() {
     if (!db || !settings) return;
     const docRef = doc(db, "contributionSettings", "default");
     
-    setDoc(docRef, settings)
-      .then(() => {
-          toast({
-              title: "Pengaturan Disimpan",
-              description: "Nominal iuran telah berhasil diperbarui di Firestore."
-          })
-      })
+    setDoc(docRef, settings, { merge: true })
       .catch((serverError) => {
           const permissionError = new FirestorePermissionError({
               path: docRef.path,
@@ -148,7 +142,7 @@ export default function AdminPage() {
   return (
     <>
       <div className="flex flex-col min-h-screen">
-        <Header title="Halaman Admin" />
+        <Header title="Ketetapan Iuran" />
         <main className="flex-1 p-4 md:p-6 space-y-6">
           <Card className="max-w-2xl mx-auto">
             <CardHeader>
