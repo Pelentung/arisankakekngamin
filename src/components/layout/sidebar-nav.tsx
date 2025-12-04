@@ -25,6 +25,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Separator } from '../ui/separator';
+import { useUser } from '@/firebase';
 
 const navItems = [
   { href: '/', label: 'Menu Utama', icon: LayoutDashboard },
@@ -40,6 +41,7 @@ const navItems = [
 export function SidebarNav() {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
+  const { user } = useUser();
 
   const isNavItemActive = (href: string) => {
     // Exact match for the homepage
@@ -52,6 +54,10 @@ export function SidebarNav() {
     // StartsWith for all other nested routes
     return pathname.startsWith(href);
   };
+  
+  if (!user) {
+    return null;
+  }
 
   return (
     <>

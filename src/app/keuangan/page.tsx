@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser } from '@/firebase';
 import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -54,7 +54,7 @@ const generateMonthOptions = () => {
 };
 
 // --- Detailed Table for Main Group ---
-const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
+const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels, isReadOnly }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, contributionLabels: Record<string, string>, isReadOnly: boolean}) => {
   const contributionKeys = Object.keys(contributionLabels);
   
   return (
@@ -96,6 +96,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
                                 checked={contribution.paid}
                                 onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
                                 aria-label={`Tandai ${contributionLabels[type]} untuk ${payment.member?.name} lunas`}
+                                disabled={isReadOnly}
                             />
                             <label htmlFor={`paid-${payment.id}-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                 {formatCurrency(contribution.amount)}
@@ -133,7 +134,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
 }
 
 // --- Simple Table for Other Groups ---
-const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedPayment & { member?: Member })[], onStatusChange: (paymentId: string, newStatus: DetailedPayment['status']) => void }) => {
+const SimplePaymentTable = ({ payments, onStatusChange, isReadOnly }: { payments: (DetailedPayment & { member?: Member })[], onStatusChange: (paymentId: string, newStatus: DetailedPayment['status']) => void, isReadOnly: boolean }) => {
     return (
         <Table>
             <TableHeader>
@@ -160,7 +161,7 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedP
                         </TableCell>
                         <TableCell>{new Date(payment.dueDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</TableCell>
                         <TableCell>
-                          <Select value={payment.status} onValueChange={(value) => onStatusChange(payment.id, value as DetailedPayment['status'])}>
+                          <Select value={payment.status} onValueChange={(value) => onStatusChange(payment.id, value as DetailedPayment['status'])} disabled={isReadOnly}>
                             <SelectTrigger className="w-[120px]">
                                 <SelectValue/>
                             </SelectTrigger>
@@ -224,6 +225,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
 export default function KeuanganPage() {
   const { toast } = useToast();
   const db = useFirestore();
+  const { user } = useUser();
   // Global data
   const [allPayments, setAllPayments] = useState<DetailedPayment[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
@@ -245,6 +247,7 @@ export default function KeuanganPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
+  const isReadOnly = !user?.isAdmin;
 
   // Data fetching
   useEffect(() => {
@@ -494,16 +497,20 @@ export default function KeuanganPage() {
                                 <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                 <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                                <Button onClick={generatePaymentsForMonth} variant="outline">Buat Catatan Iuran</Button>
-                                <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
+                                {!isReadOnly && (
+                                    <>
+                                        <Button onClick={generatePaymentsForMonth} variant="outline">Buat Catatan Iuran</Button>
+                                        <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
+                                    </>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
                             {filteredPayments.length > 0 ? (
                                 selectedGroup === mainArisanGroup.id ? (
-                                    <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
+                                    <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} isReadOnly={isReadOnly} />
                                 ) : (
-                                    <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
+                                    <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} isReadOnly={isReadOnly} />
                                 )
                             ) : (
                                 <div className="text-center text-muted-foreground py-8">
@@ -521,11 +528,11 @@ export default function KeuanganPage() {
                                 <CardTitle>Detail Pengeluaran</CardTitle>
                                 <CardDescription>Catat semua pengeluaran pada bulan yang dipilih.</CardDescription>
                             </div>
-                            <Button onClick={handleAddExpense}><PlusCircle className="mr-2 h-4 w-4" />Tambah Pengeluaran</Button>
+                            {!isReadOnly && <Button onClick={handleAddExpense}><PlusCircle className="mr-2 h-4 w-4" />Tambah Pengeluaran</Button>}
                         </CardHeader>
                         <CardContent>
                             <Table>
-                                <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Deskripsi</TableHead><TableHead>Kategori</TableHead><TableHead>Jumlah</TableHead><TableHead className="text-right">Tindakan</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Deskripsi</TableHead><TableHead>Kategori</TableHead><TableHead>Jumlah</TableHead>{!isReadOnly && <TableHead className="text-right">Tindakan</TableHead>}</TableRow></TableHeader>
                                 <TableBody>
                                 {filteredExpenses.length > 0 ? filteredExpenses.map((expense) => (
                                     <TableRow key={expense.id}>
@@ -533,10 +540,12 @@ export default function KeuanganPage() {
                                     <TableCell className="font-medium">{expense.description}</TableCell>
                                     <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
                                     <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><MoreHorizontal className="h-4 w-4" /></Button>
-                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
-                                    </TableCell>
+                                    {!isReadOnly && (
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                        </TableCell>
+                                    )}
                                     </TableRow>
                                 )) : <TableRow><TableCell colSpan={5} className="text-center h-24">Tidak ada data pengeluaran untuk bulan ini.</TableCell></TableRow>}
                                 </TableBody>
@@ -549,8 +558,7 @@ export default function KeuanganPage() {
         </Card>
       </main>
     </div>
-    {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
+    {!isReadOnly && isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
     </>
   );
 }
-

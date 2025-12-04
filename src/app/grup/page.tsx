@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser } from '@/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, writeBatch, getDocs, query } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -320,6 +320,7 @@ const AddMemberToGroupDialog = ({
 export default function ManageGroupsAndMembersPage() {
   const { toast } = useToast();
   const db = useFirestore();
+  const { user } = useUser();
   const [members, setMembers] = useState<Member[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [isMemberDialogOpen, setIsMemberDialogOpen] = useState(false);
@@ -506,6 +507,8 @@ export default function ManageGroupsAndMembersPage() {
         errorEmitter.emit('permission-error', permissionError);
     });
   }
+
+  const isReadOnly = !user?.isAdmin;
   
   return (
     <>
@@ -524,16 +527,18 @@ export default function ManageGroupsAndMembersPage() {
                   Kelola Semua Anggota
                 </TabsTrigger>
               </TabsList>
-              <div className='flex gap-2 flex-wrap'>
-                <Button variant="outline" onClick={() => setIsAddToGroupDialogOpen(true)}>
-                    <Users className="mr-2 h-4 w-4" />
-                    Tambahkan Anggota ke Grup
-                </Button>
-                <Button onClick={handleAddMember}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Tambah Anggota Baru
-                </Button>
-            </div>
+              {!isReadOnly && (
+                <div className='flex gap-2 flex-wrap'>
+                    <Button variant="outline" onClick={() => setIsAddToGroupDialogOpen(true)}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Tambahkan Anggota ke Grup
+                    </Button>
+                    <Button onClick={handleAddMember}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Tambah Anggota Baru
+                    </Button>
+                </div>
+              )}
             </div>
 
             <TabsContent value="groups">
@@ -568,15 +573,17 @@ export default function ManageGroupsAndMembersPage() {
                               </Avatar>
                               <span className="font-medium text-sm">{member.name}</span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive h-8 w-8"
-                              onClick={() => handleRemoveFromGroup(group.id, member.id)}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Hapus dari grup</span>
-                            </Button>
+                            {!isReadOnly && (
+                                <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive h-8 w-8"
+                                onClick={() => handleRemoveFromGroup(group.id, member.id)}
+                                >
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Hapus dari grup</span>
+                                </Button>
+                            )}
                           </div>
                         ))}
                          {groupMembers.length === 0 && (
@@ -604,7 +611,7 @@ export default function ManageGroupsAndMembersPage() {
                         <TableHead className="w-[250px]">Anggota</TableHead>
                         <TableHead>Alamat</TableHead>
                         <TableHead>Nomor HP</TableHead>
-                        <TableHead className="text-right">Tindakan</TableHead>
+                        {!isReadOnly && <TableHead className="text-right">Tindakan</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -626,30 +633,32 @@ export default function ManageGroupsAndMembersPage() {
                           </TableCell>
                           <TableCell className="max-w-[300px] truncate">{member.address}</TableCell>
                           <TableCell>{member.phone}</TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Tindakan</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Tindakan</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onClick={() => handleEditMember(member)}
-                                >
-                                  Ubah
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                  onClick={() => handleDeleteMember(member.id)}
-                                >
-                                  Hapus
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
+                          {!isReadOnly && (
+                            <TableCell className="text-right">
+                                <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Tindakan</span>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Tindakan</DropdownMenuLabel>
+                                    <DropdownMenuItem
+                                    onClick={() => handleEditMember(member)}
+                                    >
+                                    Ubah
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                    onClick={() => handleDeleteMember(member.id)}
+                                    >
+                                    Hapus
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -661,7 +670,7 @@ export default function ManageGroupsAndMembersPage() {
         </main>
       </div>
 
-      {isMemberDialogOpen && (
+      {!isReadOnly && isMemberDialogOpen && (
         <MemberDialog
           member={selectedMember}
           isOpen={isMemberDialogOpen}
@@ -670,13 +679,15 @@ export default function ManageGroupsAndMembersPage() {
         />
       )}
 
-      <AddMemberToGroupDialog
-        isOpen={isAddToGroupDialogOpen}
-        onClose={() => setIsAddToGroupDialogOpen(false)}
-        groups={groups}
-        allMembers={members}
-        onAdd={handleAddMemberToGroup}
-      />
+      {!isReadOnly && isAddToGroupDialogOpen && (
+        <AddMemberToGroupDialog
+            isOpen={isAddToGroupDialogOpen}
+            onClose={() => setIsAddToGroupDialogOpen(false)}
+            groups={groups}
+            allMembers={members}
+            onAdd={handleAddMemberToGroup}
+        />
+       )}
     </>
   );
 }

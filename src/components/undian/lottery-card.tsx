@@ -29,7 +29,7 @@ import { Trophy, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser } from '@/firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -44,6 +44,7 @@ interface LotteryCardProps {
 export function LotteryCard({ group, title, description }: LotteryCardProps) {
   const { toast } = useToast();
   const db = useFirestore();
+  const { user } = useUser();
   const [members, setMembers] = useState<Member[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -56,6 +57,7 @@ export function LotteryCard({ group, title, description }: LotteryCardProps) {
   const currentWinner = members.find(m => m.id === group.currentWinnerId);
   const groupMembers = members.filter(m => group.memberIds.includes(m.id));
   const winnerIds = group.winnerHistory?.map(wh => wh.memberId) || [];
+  const isReadOnly = !user?.isAdmin;
 
   const handleSelectWinner = async (selectedMember: Member) => {
     if (!db || isSaving) return;
@@ -140,25 +142,27 @@ export function LotteryCard({ group, title, description }: LotteryCardProps) {
                         {hasWon ? (
                             <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
                         ) : (
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button size="sm" variant="outline" disabled={isSaving}>Pilih</Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Konfirmasi Pemenang</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Apakah Anda yakin ingin menetapkan <strong>{member.name}</strong> sebagai pemenang arisan untuk periode ini? Tindakan ini tidak dapat diurungkan.
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleSelectWinner(member)}>
-                                        Ya, Jadikan Pemenang
-                                    </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                            !isReadOnly && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button size="sm" variant="outline" disabled={isSaving}>Pilih</Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Konfirmasi Pemenang</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Apakah Anda yakin ingin menetapkan <strong>{member.name}</strong> sebagai pemenang arisan untuk periode ini? Tindakan ini tidak dapat diurungkan.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleSelectWinner(member)}>
+                                            Ya, Jadikan Pemenang
+                                        </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )
                         )}
                     </div>
                   )
@@ -167,11 +171,13 @@ export function LotteryCard({ group, title, description }: LotteryCardProps) {
                 </div>
             </ScrollArea>
         </CardContent>
-        <CardFooter className="pt-4">
-             <Button className="w-full" variant="secondary" onClick={() => handleSelectWinner({ id: '', name: 'Kosongkan Pemenang' } as Member)} disabled={isSaving}>
-                Kosongkan Pemenang Saat Ini
-            </Button>
-        </CardFooter>
+        {!isReadOnly && (
+            <CardFooter className="pt-4">
+                <Button className="w-full" variant="secondary" onClick={() => handleSelectWinner({ id: '', name: 'Kosongkan Pemenang' } as Member)} disabled={isSaving}>
+                    Kosongkan Pemenang Saat Ini
+                </Button>
+            </CardFooter>
+        )}
       </Card>
     </>
   );

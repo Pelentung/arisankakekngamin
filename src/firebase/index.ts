@@ -24,4 +24,5 @@ function initializeFirebase() {
 }
 
 export * from './provider';
+export * from './auth/use-user';
 export { initializeFirebase };
