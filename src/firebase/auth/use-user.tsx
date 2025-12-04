@@ -31,50 +31,53 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         return;
     }
     
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      let unsubscribeSnapshot = () => {};
-      
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      let userDocSnapshotUnsubscribe = () => {};
+
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         
-        const isAdminByEmail = firebaseUser.email === 'adminarisan@gmail.com';
-        const userProfileData = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            isAdmin: isAdminByEmail,
-        };
-
-        try {
-            await setDoc(userRef, userProfileData, { merge: true });
-        } catch (error) {
-            console.error("Error writing user profile:", error);
-        }
-
-        unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+        // This listener will handle both initial load and subsequent updates to user data
+        userDocSnapshotUnsubscribe = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             setUser({ ...firebaseUser, ...docSnap.data() });
           } else {
+            // Document doesn't exist, so create it. This typically happens on first sign-up.
+            const isAdminByEmail = firebaseUser.email === 'adminarisan@gmail.com';
+            const userProfileData = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                isAdmin: isAdminByEmail,
+            };
+            setDoc(userRef, userProfileData, { merge: true }).catch(error => {
+                console.error("Error creating user document:", error);
+            });
+            // We set the user state immediately with the data we have
             setUser({ ...firebaseUser, ...userProfileData });
           }
           setLoading(false);
         }, (error) => {
             console.error("Error in user snapshot listener:", error);
-            setUser({ ...firebaseUser, ...userProfileData });
+            // Fallback: set user data without Firestore profile if snapshot fails
+            setUser(firebaseUser);
             setLoading(false);
         });
 
       } else {
-        // User is signed out, this is the crucial part for fixing logout error
-        unsubscribeAll(); // Unsubscribe from all data listeners
+        // User is signed out. This is the crucial part for fixing logout errors.
+        unsubscribeAll(); // Unsubscribe from all data listeners across the app.
         setUser(null);
         setLoading(false);
       }
       
-      // Cleanup snapshot listener on re-run or unmount
-      return () => unsubscribeSnapshot();
+      // Cleanup the user document snapshot listener when auth state changes or on unmount
+      return () => {
+        userDocSnapshotUnsubscribe();
+      };
     });
 
+    // Cleanup auth state listener on component unmount
     return () => unsubscribeAuth();
   }, [auth, db]);
 
