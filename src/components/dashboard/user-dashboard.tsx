@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { WinnerHistory } from './winner-history';
 import { AnnouncementsList } from '../laporan/announcements-list';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../ui/card';
+import { RealTimeClock } from './real-time-clock';
 
 export function UserDashboard() {
     const { auth } = initializeFirebase();
@@ -24,14 +25,17 @@ export function UserDashboard() {
         <div className="flex flex-col min-h-screen">
             <Header title="Menu Utama" />
             <main className="flex-1 p-4 md:p-6 space-y-6">
-                 <div className="flex items-center justify-between">
-                    <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
-                        Laporan & Pengumuman
+                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl title-gradient">
+                        ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
                     </h1>
-                    <Button variant="outline" onClick={handleSignOut}>
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Keluar
-                    </Button>
+                    <div className="flex items-center gap-4">
+                        <RealTimeClock />
+                        <Button variant="outline" onClick={handleSignOut}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Keluar
+                        </Button>
+                    </div>
                  </div>
                  
                  <Card>
@@ -59,5 +63,3 @@ export function UserDashboard() {
         </div>
     );
 }
-
-    
