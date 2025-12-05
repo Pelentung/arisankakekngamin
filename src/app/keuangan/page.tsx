@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { DetailedPayment, Member, Group, ContributionSettings, Expense, Note } from '@/app/data';
+import type { DetailedPayment, Member, Group, ContributionSettings, Expense } from '@/app/data';
 import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -253,7 +253,7 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db) return;
     
-    const dataLoaded = { payments: false, members: false, groups: false, settings: false, expenses: false };
+    const dataLoaded = { payments: false, members: false, groups: false, expenses: false };
     const checkAllDataLoaded = () => {
         if (Object.values(dataLoaded).every(Boolean)) {
             setIsLoading(false);
@@ -285,19 +285,44 @@ export default function KeuanganPage() {
       }
       dataLoaded.groups = true; checkAllDataLoaded();
     });
-    const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => { 
-      // We don't have a single source of truth anymore, so we just mark it as loaded.
-      // Settings will be fetched on-demand per month.
-      dataLoaded.settings = true; checkAllDataLoaded();
-    });
 
     return () => { 
-        unsubPayments(); unsubMembers(); unsubGroups(); unsubSettings(); unsubExpenses(); 
+        unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses(); 
     };
   }, [db, selectedGroup]); 
   
+  // Fetch contribution settings based on selected month
+  useEffect(() => {
+    if (!db || !selectedMonth) return;
+
+    const fetchSettings = async () => {
+        const docRef = doc(db, 'contributionSettings', selectedMonth);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            setContributionSettings(docSnap.data() as ContributionSettings);
+        } else {
+             // Fallback to last month's settings
+            const lastMonthDate = subMonths(new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1])), 1);
+            const lastMonthId = `${getYear(lastMonthDate)}-${getMonth(lastMonthDate)}`;
+            const lastMonthDocRef = doc(db, 'contributionSettings', lastMonthId);
+            const lastMonthSnap = await getDoc(lastMonthDocRef);
+
+            if (lastMonthSnap.exists()) {
+                setContributionSettings(lastMonthSnap.data() as ContributionSettings);
+                toast({ title: "Info", description: `Pengaturan untuk bulan ini tidak ditemukan, menggunakan pengaturan dari ${format(lastMonthDate, 'MMMM yyyy', {locale: id})}.`});
+            } else {
+                // Fallback to default if no monthly setting exists
+                toast({ title: "Peringatan", description: `Pengaturan iuran untuk bulan ini tidak ditemukan, harap atur di halaman Ketetapan Iuran.`, variant: "destructive" });
+                setContributionSettings(null);
+            }
+        }
+    }
+    fetchSettings();
+  }, [db, selectedMonth, toast]);
+
   const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup || !mainArisanGroup || allMembers.length === 0) return;
+    if (!db || !selectedGroup || !mainArisanGroup || allMembers.length === 0 || !contributionSettings) return;
     
     const syncKey = `${selectedGroup}-${selectedMonth}`;
     if (syncTracker.current.has(syncKey)) {
@@ -312,24 +337,7 @@ export default function KeuanganPage() {
              throw new Error("Grup tidak ditemukan");
         }
 
-        // Fetch settings for the selected month
-        const settingsDocRef = doc(db, 'contributionSettings', selectedMonth);
-        const settingsSnap = await getDoc(settingsDocRef);
-        let currentMonthSettings: ContributionSettings;
-
-        if (settingsSnap.exists()) {
-            currentMonthSettings = settingsSnap.data() as ContributionSettings;
-        } else {
-            // Fallback to default if no monthly setting exists
-            toast({ title: "Peringatan", description: `Pengaturan iuran untuk bulan ini tidak ditemukan, menggunakan pengaturan default.`, variant: "destructive" });
-            const defaultSettingsRef = doc(db, 'contributionSettings', 'default');
-            const defaultSettingsSnap = await getDoc(defaultSettingsRef);
-            if(defaultSettingsSnap.exists()) {
-                currentMonthSettings = defaultSettingsSnap.data() as ContributionSettings;
-            } else {
-                 throw new Error("Pengaturan iuran default tidak ditemukan.");
-            }
-        }
+        const currentMonthSettings = contributionSettings;
 
         const [year, month] = selectedMonth.split('-').map(Number);
         const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
@@ -391,13 +399,13 @@ export default function KeuanganPage() {
     } finally {
         setIsGenerating(false);
     }
-  }, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, toast]);
+  }, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, contributionSettings, toast]);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading && contributionSettings) {
       ensurePaymentsExistForMonth();
     }
-  }, [isLoading, selectedGroup, selectedMonth, ensurePaymentsExistForMonth]);
+  }, [isLoading, selectedGroup, selectedMonth, contributionSettings, ensurePaymentsExistForMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -590,8 +598,8 @@ export default function KeuanganPage() {
                                     )
                                 ) : (
                                     <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
-                                        <p>Tidak ada anggota dalam grup ini untuk bulan yang dipilih.</p>
-                                        <p className="text-xs mt-2">Silakan tambahkan anggota ke grup ini di halaman 'Kelola Grup & Anggota'.</p>
+                                        <p>Tidak ada anggota dalam grup ini untuk bulan yang dipilih, atau pengaturan iuran belum dibuat.</p>
+                                        <p className="text-xs mt-2">Silakan tambahkan anggota ke grup ini di halaman 'Kelola Grup & Anggota' dan pastikan pengaturan iuran sudah ada.</p>
                                     </div>
                                 )}
                             </CardContent>
@@ -650,3 +658,5 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
+
+    
