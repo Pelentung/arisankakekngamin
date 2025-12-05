@@ -72,25 +72,25 @@ export function AnnouncementsList() {
     <Card className="bg-destructive/10 border-destructive/30">
       <CardHeader>
         <CardTitle className='uppercase text-yellow-400 animate-blink'>Pengumuman</CardTitle>
-        <CardDescription className="text-destructive-foreground/80">
+        <CardDescription className="text-yellow-500/80">
           Informasi penting dan terkini dari pengurus arisan.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Accordion type="single" collapsible defaultValue={announcements[0]?.id}>
           {announcements.map((announcement) => (
-            <AccordionItem value={announcement.id} key={announcement.id} className="border-destructive/40">
+            <AccordionItem value={announcement.id} key={announcement.id} className="border-yellow-400/40">
               <AccordionTrigger>
-                <div className="flex flex-col items-start text-left w-full overflow-hidden">
+                <div className="flex flex-col items-start text-left w-full overflow-hidden text-yellow-400">
                     <div className="font-semibold w-full truncate">
                         {announcement.title}
                     </div>
-                    <span className="text-xs text-destructive-foreground/70">
+                    <span className="text-xs text-yellow-500/70">
                         Diperbarui: {format(new Date(announcement.updatedAt), 'd MMMM yyyy', { locale: id })}
                     </span>
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="whitespace-pre-wrap text-destructive-foreground/90 w-full overflow-hidden">
+              <AccordionContent className="whitespace-pre-wrap text-yellow-400/90 w-full overflow-hidden">
                  <MarqueeText text={announcement.content} />
               </AccordionContent>
             </AccordionItem>
