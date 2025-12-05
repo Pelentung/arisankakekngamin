@@ -68,18 +68,6 @@ export default function AdminPage() {
     return () => unsubscribe();
   }, [db]);
 
-  if (!settings) {
-    return (
-        <div className="flex flex-col min-h-screen">
-          <Header title="Ketetapan Iuran" />
-          <main className="flex-1 p-4 md:p-6 flex items-center justify-center">
-            <p>Loading settings...</p>
-          </main>
-        </div>
-      );
-  }
-
-
   const handleFixedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     setSettings(prev => prev ? ({
@@ -156,73 +144,77 @@ export default function AdminPage() {
             <div className="flex flex-col min-h-screen">
                 <Header title="Ketetapan Iuran" />
                 <main className="flex-1 p-4 md:p-6 space-y-6">
-                <Card className="max-w-2xl mx-auto">
-                    <CardHeader>
-                        <div className="flex items-center gap-4">
-                            <Shield className="h-8 w-8 text-primary"/>
-                            <div>
-                                <CardTitle>Pengaturan Nominal Iuran</CardTitle>
-                                <CardDescription>
-                                    Atur jumlah nominal yang harus dibayarkan anggota untuk setiap jenis iuran.
-                                </CardDescription>
+                {!settings ? (
+                     <div className="flex items-center justify-center pt-20">
+                        <p>Loading settings...</p>
+                    </div>
+                ) : (
+                    <Card className="max-w-2xl mx-auto">
+                        <CardHeader>
+                            <div className="flex items-center gap-4">
+                                <Shield className="h-8 w-8 text-primary"/>
+                                <div>
+                                    <CardTitle>Pengaturan Nominal Iuran</CardTitle>
+                                    <CardDescription>
+                                        Atur jumlah nominal yang harus dibayarkan anggota untuk setiap jenis iuran.
+                                    </CardDescription>
+                                </div>
                             </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                        <div className='space-y-4'>
+                            {fixedContributions.map(({key, label}) => (
+                                <div key={key} className="grid grid-cols-3 items-center gap-4">
+                                <Label htmlFor={key} className="">
+                                    {label}
+                                </Label>
+                                <Input 
+                                    id={key} 
+                                    type="text" 
+                                    value={formatCurrency(settings[key] as number).replace('Rp', '').trim()} 
+                                    onChange={handleFixedChange}
+                                    className="col-span-2"
+                                />
+                                </div>
+                            ))}
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                    <div className='space-y-4'>
-                        {fixedContributions.map(({key, label}) => (
-                            <div key={key} className="grid grid-cols-3 items-center gap-4">
-                            <Label htmlFor={key} className="">
-                                {label}
-                            </Label>
-                            <Input 
-                                id={key} 
-                                type="text" 
-                                value={formatCurrency(settings[key] as number).replace('Rp', '').trim()} 
-                                onChange={handleFixedChange}
-                                className="col-span-2"
-                            />
-                            </div>
-                        ))}
-                    </div>
 
-                    <Separator />
+                        <Separator />
 
-                    <div className='space-y-4'>
-                        <Label className='font-semibold'>Iuran Lainnya</Label>
-                        {settings.others.map((other, index) => (
-                            <div key={other.id} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-center">
-                                <Input
-                                    placeholder="Keterangan"
-                                    value={other.description}
-                                    onChange={(e) => handleOtherChange(index, 'description', e.target.value)}
-                                    className="md:col-span-4"
-                                />
-                                <Input
-                                    type="text"
-                                    placeholder="Nominal"
-                                    value={formatCurrency(other.amount).replace('Rp', '').trim()}
-                                    onChange={(e) => handleOtherChange(index, 'amount', parseCurrency(e.target.value))}
-                                    className="md:col-span-3"
-                                />
-                                <Button variant="ghost" size="icon" onClick={() => removeOtherContribution(index)} className="text-destructive hover:text-destructive-foreground hover:bg-destructive justify-self-end">
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        ))}
-                        <Button variant="outline" onClick={addOtherContribution} className="w-full">
-                            <PlusCircle className="mr-2 h-4 w-4"/>
-                            Tambah Iuran Lainnya
-                        </Button>
-                    </div>
-                    <Button onClick={handleSave} className="w-full mt-6">Simpan Pengaturan</Button>
-                    </CardContent>
-                </Card>
+                        <div className='space-y-4'>
+                            <Label className='font-semibold'>Iuran Lainnya</Label>
+                            {settings.others.map((other, index) => (
+                                <div key={other.id} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-center">
+                                    <Input
+                                        placeholder="Keterangan"
+                                        value={other.description}
+                                        onChange={(e) => handleOtherChange(index, 'description', e.target.value)}
+                                        className="md:col-span-4"
+                                    />
+                                    <Input
+                                        type="text"
+                                        placeholder="Nominal"
+                                        value={formatCurrency(other.amount).replace('Rp', '').trim()}
+                                        onChange={(e) => handleOtherChange(index, 'amount', parseCurrency(e.target.value))}
+                                        className="md:col-span-3"
+                                    />
+                                    <Button variant="ghost" size="icon" onClick={() => removeOtherContribution(index)} className="text-destructive hover:text-destructive-foreground hover:bg-destructive justify-self-end">
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ))}
+                            <Button variant="outline" onClick={addOtherContribution} className="w-full">
+                                <PlusCircle className="mr-2 h-4 w-4"/>
+                                Tambah Iuran Lainnya
+                            </Button>
+                        </div>
+                        <Button onClick={handleSave} className="w-full mt-6">Simpan Pengaturan</Button>
+                        </CardContent>
+                    </Card>
+                )}
                 </main>
             </div>
         </SidebarInset>
     </SidebarProvider>
   );
 }
-
-    
