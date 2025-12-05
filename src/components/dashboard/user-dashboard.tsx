@@ -47,7 +47,7 @@ export function UserDashboard() {
                  
                  <Card>
                     <CardHeader>
-                        <CardTitle className="uppercase text-blue-600">Pengumuman</CardTitle>
+                        <CardTitle className="uppercase text-blue-600 animate-shimmer bg-[linear-gradient(110deg,transparent,45%,silver,55%,transparent)] bg-[length:200%_100%] bg-clip-text animate-blink">Pengumuman</CardTitle>
                         <CardDescription>Informasi penting dan terkini dari pengurus arisan.</CardDescription>
                     </CardHeader>
                     <CardContent>
