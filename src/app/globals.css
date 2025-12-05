@@ -8,9 +8,9 @@ body {
 
 @layer base {
   :root {
-    --background: 125 33% 73%;
+    --background: 240 10% 96%;
     --foreground: 0 0% 3.9%;
-    --card: 125 33% 90%;
+    --card: 240 10% 98%;
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
@@ -25,7 +25,7 @@ body {
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 80%;
-    --input: 125 33% 85%;
+    --input: 240 10% 92%;
     --ring: 35 88% 63%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -43,37 +43,37 @@ body {
     --sidebar-ring: 35 88% 63%;
   }
   .dark {
-    --background: 220 13% 18%; /* Dark Slate Gray */
-    --foreground: 210 20% 98%; /* Almost White */
-    --card: 220 13% 22%; /* Slightly Lighter Slate */
-    --card-foreground: 210 20% 98%;
-    --popover: 220 13% 18%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 30 96% 44%; /* Keeping the brand orange */
-    --primary-foreground: 0 0% 98%;
-    --secondary: 220 13% 31%; /* Lighter Slate for secondary elements */
-    --secondary-foreground: 210 20% 98%;
-    --muted: 220 13% 31%;
-    --muted-foreground: 220 9% 61%; /* Softer gray for muted text */
-    --accent: 35 88% 63%; /* Keeping the brand accent */
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 72% 51%; /* Slightly adjusted red */
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 13% 31%; /* Slate border */
-    --input: 220 13% 31%;
+    --background: 211 81% 10%; /* Dark Blue */
+    --foreground: 210 40% 98%; /* White */
+    --card: 211 81% 15%; /* Slightly Lighter Blue */
+    --card-foreground: 210 40% 98%;
+    --popover: 211 81% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 35 88% 63%; /* Accent Orange/Yellow */
+    --primary-foreground: 210 40% 9.8%;
+    --secondary: 211 81% 25%; /* Lighter blue for secondary elements */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 211 81% 25%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 211 81% 43%; /* Main Blue Bell color as accent */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 211 81% 25%;
+    --input: 211 81% 25%;
     --ring: 35 88% 63%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 220 13% 14%; /* Even darker sidebar */
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 30 96% 44%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 13% 22%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 220 13% 31%;
+    --sidebar-background: 211 81% 8%; /* Even darker sidebar */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 35 88% 63%;
+    --sidebar-primary-foreground: 210 40% 9.8%;
+    --sidebar-accent: 211 81% 18%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 211 81% 25%;
     --sidebar-ring: 35 88% 63%;
   }
 }

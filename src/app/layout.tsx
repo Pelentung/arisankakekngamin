@@ -16,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
+    <html lang="id" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -24,7 +24,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap"
           rel="stylesheet"
         />
-        <meta name="theme-color" content="#F2994A" />
+        <meta name="theme-color" content="#1569C7" />
       </head>
       <body className={cn('font-body antialiased min-h-screen bg-background')}>
         <FirebaseClientProvider>
