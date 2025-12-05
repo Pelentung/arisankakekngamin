@@ -290,7 +290,7 @@
     },
     "contributionSettings": {
       "title": "Contribution Settings",
-      "description": "Settings for contribution amounts.",
+      "description": "Settings for contribution amounts for a specific month.",
       "type": "object",
       "properties": {
         "main": {
@@ -336,12 +336,6 @@
     "providers": []
   },
   "firestore": {
-    "/arisanData/{arisanDataId}": {
-      "schema": {
-        "$ref": "#/entities/arisanData"
-      },
-      "description": "Stores the entire arisan data structure."
-    },
     "/members/{memberId}": {
       "schema": {
         "$ref": "#/entities/member"
@@ -372,11 +366,11 @@
       },
       "description": "Stores announcements."
     },
-    "/contributionSettings/{settingId}": {
+    "/contributionSettings/{monthId}": {
       "schema": {
         "$ref": "#/entities/contributionSettings"
       },
-      "description": "Stores contribution settings."
+      "description": "Stores monthly contribution settings. The monthId should be in 'YYYY-MM' format."
     }
   }
 }

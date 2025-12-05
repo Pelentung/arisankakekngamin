@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
@@ -253,56 +253,51 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db) return;
     
-    let isMounted = true;
-    let dataLoadedCount = 0;
-    const requiredDataCount = 5; // payments, members, groups, settings, expenses
-
-    const onDataLoaded = () => {
-      if (!isMounted) return;
-      dataLoadedCount++;
-      if (dataLoadedCount >= requiredDataCount) {
-        setIsLoading(false);
-      }
+    const dataLoaded = { payments: false, members: false, groups: false, settings: false, expenses: false };
+    const checkAllDataLoaded = () => {
+        if (Object.values(dataLoaded).every(Boolean)) {
+            setIsLoading(false);
+        }
     };
 
     const unsubPayments = subscribeToData(db, 'payments', (data) => { 
-        if (isMounted) {
-            setAllPayments(data as DetailedPayment[]); 
-            setLocalChanges(data as DetailedPayment[]);
-            onDataLoaded();
-        }
+        setAllPayments(data as DetailedPayment[]); 
+        setLocalChanges(data as DetailedPayment[]);
+        dataLoaded.payments = true; checkAllDataLoaded();
     });
-    const unsubMembers = subscribeToData(db, 'members', (data) => { if (isMounted) { setAllMembers(data as Member[]); onDataLoaded(); } });
-    const unsubExpenses = subscribeToData(db, 'expenses', (data) => { if (isMounted) { setAllExpenses(data as Expense[]); onDataLoaded(); } });
+    const unsubMembers = subscribeToData(db, 'members', (data) => { 
+        setAllMembers(data as Member[]); 
+        dataLoaded.members = true; checkAllDataLoaded(); 
+    });
+    const unsubExpenses = subscribeToData(db, 'expenses', (data) => { 
+        setAllExpenses(data as Expense[]); 
+        dataLoaded.expenses = true; checkAllDataLoaded(); 
+    });
     const unsubGroups = subscribeToData(db, 'groups', (data) => {
-      if (isMounted) {
-        const groups = data as Group[];
-        setAllGroups(groups);
-        const mainGroup = groups.find(g => g.name === 'Arisan Utama');
-        if (mainGroup) {
-          setMainArisanGroup(mainGroup);
-          if (!selectedGroup) {
-            setSelectedGroup(mainGroup.id);
-          }
+      const groups = data as Group[];
+      setAllGroups(groups);
+      const mainGroup = groups.find(g => g.name === 'Arisan Utama');
+      if (mainGroup) {
+        setMainArisanGroup(mainGroup);
+        if (!selectedGroup) {
+          setSelectedGroup(mainGroup.id);
         }
-        onDataLoaded();
       }
+      dataLoaded.groups = true; checkAllDataLoaded();
     });
     const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => { 
-        if (isMounted) {
-            if (data.length > 0) setContributionSettings(data[0] as ContributionSettings);
-            onDataLoaded();
-        }
+      // We don't have a single source of truth anymore, so we just mark it as loaded.
+      // Settings will be fetched on-demand per month.
+      dataLoaded.settings = true; checkAllDataLoaded();
     });
 
     return () => { 
-        isMounted = false;
         unsubPayments(); unsubMembers(); unsubGroups(); unsubSettings(); unsubExpenses(); 
     };
   }, [db, selectedGroup]); 
   
   const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (isLoading || isGenerating || !db || !selectedGroup || !mainArisanGroup || !contributionSettings || allMembers.length === 0) return;
+    if (!db || !selectedGroup || !mainArisanGroup || allMembers.length === 0) return;
     
     const syncKey = `${selectedGroup}-${selectedMonth}`;
     if (syncTracker.current.has(syncKey)) {
@@ -313,12 +308,30 @@ export default function KeuanganPage() {
 
     try {
         const group = allGroups.find(g => g.id === selectedGroup);
-        if (!group) return;
+        if (!group) {
+             throw new Error("Grup tidak ditemukan");
+        }
+
+        // Fetch settings for the selected month
+        const settingsDocRef = doc(db, 'contributionSettings', selectedMonth);
+        const settingsSnap = await getDoc(settingsDocRef);
+        let currentMonthSettings: ContributionSettings;
+
+        if (settingsSnap.exists()) {
+            currentMonthSettings = settingsSnap.data() as ContributionSettings;
+        } else {
+            // Fallback to default if no monthly setting exists
+            toast({ title: "Peringatan", description: `Pengaturan iuran untuk bulan ini tidak ditemukan, menggunakan pengaturan default.`, variant: "destructive" });
+            const defaultSettingsRef = doc(db, 'contributionSettings', 'default');
+            const defaultSettingsSnap = await getDoc(defaultSettingsRef);
+            if(defaultSettingsSnap.exists()) {
+                currentMonthSettings = defaultSettingsSnap.data() as ContributionSettings;
+            } else {
+                 throw new Error("Pengaturan iuran default tidak ditemukan.");
+            }
+        }
 
         const [year, month] = selectedMonth.split('-').map(Number);
-        
-        // We fetch all payments for the group and filter by month on the client-side
-        // to avoid needing a composite index in Firestore.
         const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
         const querySnapshot = await getDocs(paymentsQuery);
         
@@ -340,11 +353,11 @@ export default function KeuanganPage() {
                 const dueDate = endOfMonth(targetDate).toISOString();
 
                 if (group.id === mainArisanGroup.id) {
-                    contributions.main = { amount: contributionSettings.main, paid: false };
-                    contributions.cash = { amount: contributionSettings.cash, paid: false };
-                    contributions.sick = { amount: contributionSettings.sick, paid: false };
-                    contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
-                    contributionSettings.others.forEach(other => {
+                    contributions.main = { amount: currentMonthSettings.main, paid: false };
+                    contributions.cash = { amount: currentMonthSettings.cash, paid: false };
+                    contributions.sick = { amount: currentMonthSettings.sick, paid: false };
+                    contributions.bereavement = { amount: currentMonthSettings.bereavement, paid: false };
+                    currentMonthSettings.others.forEach(other => {
                         contributions[other.id] = { amount: other.amount, paid: false };
                     });
                     totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
@@ -367,8 +380,9 @@ export default function KeuanganPage() {
             });
         }
         syncTracker.current.add(syncKey);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error ensuring payments exist:", error);
+        toast({ title: "Sinkronisasi Gagal", description: error.message || "Terjadi galat saat membuat catatan iuran.", variant: "destructive" });
         if (error instanceof FirestorePermissionError) {
              errorEmitter.emit('permission-error', error);
         } else {
@@ -377,11 +391,13 @@ export default function KeuanganPage() {
     } finally {
         setIsGenerating(false);
     }
-  }, [isLoading, isGenerating, db, selectedGroup, selectedMonth, allGroups, allMembers, contributionSettings, mainArisanGroup, toast]);
+  }, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, toast]);
 
   useEffect(() => {
+    if (!isLoading) {
       ensurePaymentsExistForMonth();
-  }, [ensurePaymentsExistForMonth]);
+    }
+  }, [isLoading, selectedGroup, selectedMonth, ensurePaymentsExistForMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -422,7 +438,6 @@ export default function KeuanganPage() {
           [contributionType]: { ...p.contributions[contributionType], paid: isPaid } 
         };
         
-        // Original logic: Status is "Paid" only if ALL contributions are paid.
         const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
 
         return { 
@@ -510,15 +525,15 @@ export default function KeuanganPage() {
        );
     }
 
-    if (!contributionSettings || !mainArisanGroup) {
+    if (!mainArisanGroup) {
         return (
             <Card>
                 <CardHeader>
                     <CardTitle>Data Belum Lengkap</CardTitle>
-                    <CardDescription>Pengaturan iuran atau grup utama belum ditemukan.</CardDescription>
+                    <CardDescription>Grup utama belum ditemukan.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground">Harap pastikan Anda telah mengatur nominal iuran di halaman 'Ketetapan Iuran' dan grup 'Arisan Utama' sudah ada.</p>
+                    <p className="text-muted-foreground">Harap pastikan grup 'Arisan Utama' sudah ada.</p>
                 </CardContent>
             </Card>
         );
@@ -635,5 +650,3 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
-
-    
