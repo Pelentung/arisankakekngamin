@@ -56,7 +56,7 @@ export function SidebarNav() {
       <SidebarHeader>
         <div className="flex items-center gap-3 p-2">
           <div className="rounded-lg bg-primary/20 p-2 text-primary">
-            <Users className="h-6 w-6" />
+            <Image src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3ZBz00B5SPoPxU6neRRC1L-QIR0aSDcUZrA&s" alt="App Logo" width={24} height={24} />
           </div>
           <h1 className="font-headline text-lg font-extrabold tracking-tight title-gradient">
             ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN

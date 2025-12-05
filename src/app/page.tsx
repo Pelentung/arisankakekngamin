@@ -83,7 +83,7 @@ export default function HomePage() {
         title: 'Login Tamu Berhasil',
         description: 'Anda masuk sebagai tamu.',
       });
-      // onAuthStateChanged will handle the state update and dashboard rendering
+      router.push('/laporan');
     } catch (error) {
       toast({
         title: 'Login Gagal',
@@ -119,7 +119,7 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 flex flex-col items-center text-center">
         <div className="mb-4 rounded-lg bg-primary/20 p-3 text-primary">
-            <Users className="h-10 w-10" />
+            <Image src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3ZBz00B5SPoPxU6neRRC1L-QIR0aSDcUZrA&s" alt="App Logo" width={40} height={40} />
         </div>
         <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl title-gradient">
           ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
@@ -198,5 +198,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    
