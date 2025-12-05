@@ -128,7 +128,7 @@ export default function HomePage() {
       <div className="mb-8 flex flex-col items-center text-center">
         <div className="mb-4 rounded-lg bg-primary/20 p-4 text-primary">
             <Image
-                src="https://png.pngtree.com/png-vector/20240720/ourmid/pngtree-an-colorful-family-logo-with-a-person-holding-another-person-vector-png-image_7238686.png"
+                src="https://png.pngtree.com/png-vector/20220805/ourmid/pngtree-vector-family-logo-modern-art-group-vector-png-image_28081440.png"
                 width={48}
                 height={48}
                 alt="Arisan Keluarga Logo"

@@ -57,7 +57,7 @@ export function SidebarNav() {
       <SidebarHeader>
         <div className="flex items-center gap-3 p-2">
           <Image
-            src="https://png.pngtree.com/png-vector/20240720/ourmid/pngtree-an-colorful-family-logo-with-a-person-holding-another-person-vector-png-image_7238686.png"
+            src="https://png.pngtree.com/png-vector/20220805/ourmid/pngtree-vector-family-logo-modern-art-group-vector-png-image_28081440.png"
             width={40}
             height={40}
             alt="Arisan Keluarga Logo"
