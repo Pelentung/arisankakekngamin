@@ -93,6 +93,10 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
         },
+        'blink-caret': {
+          'from, to': { borderColor: 'transparent' },
+          '50%': { borderColor: 'hsl(var(--primary))' },
+        },
         marquee: {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(-100%)' },
@@ -101,14 +105,20 @@ export default {
           from: { backgroundPosition: '200% 0' },
           to: { backgroundPosition: '-200% 0' },
         },
+        typing: {
+          from: { width: '0' },
+          to: { width: '100%' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         blink: 'blink 1.5s 2',
+        'blink-caret': 'blink-caret .75s step-end infinite',
         marquee: 'marquee 15s linear infinite',
         'marquee-slow': 'marquee 25s linear infinite',
         shimmer: 'shimmer 8s linear infinite',
+        typing: 'typing 3.5s steps(40, end), blink-caret .75s step-end infinite',
       },
     },
   },

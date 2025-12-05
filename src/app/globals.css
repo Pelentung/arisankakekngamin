@@ -93,4 +93,10 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
+  .typing-effect {
+    border-right: 0.15em solid hsl(var(--primary)); /* The cursor */
+    white-space: nowrap;
+    overflow: hidden;
+    letter-spacing: 0.1em;
+  }
 }
