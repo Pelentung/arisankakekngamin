@@ -26,7 +26,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { MoreHorizontal, PlusCircle } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -245,6 +245,7 @@ export default function KeuanganPage() {
   
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
 
@@ -252,40 +253,117 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db) return;
     setIsLoading(true);
-    const unsubPayments = subscribeToData(db, 'payments', (data) => { setAllPayments(data as DetailedPayment[]); setLocalChanges(data as DetailedPayment[]); });
+    const unsubPayments = subscribeToData(db, 'payments', (data) => { 
+        setAllPayments(data as DetailedPayment[]); 
+        setLocalChanges(data as DetailedPayment[]); 
+    });
     const unsubMembers = subscribeToData(db, 'members', (data) => setAllMembers(data as Member[]));
     const unsubExpenses = subscribeToData(db, 'expenses', (data) => setAllExpenses(data as Expense[]));
     const unsubGroups = subscribeToData(db, 'groups', (data) => {
       const groups = data as Group[];
       setAllGroups(groups);
-      if (!selectedGroup) {
+      if (!selectedGroup && groups.length > 0) {
         const mainGroup = groups.find(g => g.name === 'Arisan Utama');
-        if (mainGroup) setSelectedGroup(mainGroup.id);
-        else if (groups.length > 0) setSelectedGroup(groups[0].id);
+        setSelectedGroup(mainGroup ? mainGroup.id : groups[0].id);
       }
     });
     const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => { if (data.length > 0) setContributionSettings(data[0] as ContributionSettings); });
 
     Promise.all([
-        new Promise(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'members', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'contributionSettings', () => { resolve(true); unsub(); }); }),
+        getDocs(collection(db, 'payments')),
+        getDocs(collection(db, 'members')),
+        getDocs(collection(db, 'groups')),
+        getDocs(collection(db, 'expenses')),
+        getDocs(collection(db, 'contributionSettings')),
     ]).finally(() => setIsLoading(false));
 
     return () => { unsubPayments(); unsubMembers(); unsubGroups(); unsubSettings(); unsubExpenses(); };
-  }, [db, selectedGroup]);
+  }, [db]);
+
+
+  const ensurePaymentsExistForMonth = useCallback(async () => {
+    if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings || !mainArisanGroup) return;
+
+    setIsGenerating(true);
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const targetDate = new Date(year, month);
+    const dueDate = endOfMonth(targetDate).toISOString();
+
+    const group = allGroups.find(g => g.id === selectedGroup);
+    if (!group) {
+        setIsGenerating(false);
+        return;
+    }
+
+    // Get existing payments for the selected group and month
+    const paymentsQuery = query(collection(db, 'payments'),
+        where('groupId', '==', selectedGroup),
+        where('dueDate', '>=', startOfMonth(targetDate).toISOString()),
+        where('dueDate', '<=', endOfMonth(targetDate).toISOString())
+    );
+    const querySnapshot = await getDocs(paymentsQuery);
+    const existingMemberIds = new Set(querySnapshot.docs.map(doc => doc.data().memberId));
+
+    const batch = writeBatch(db);
+    let newPaymentsCount = 0;
+
+    group.memberIds.forEach(memberId => {
+        if (!existingMemberIds.has(memberId)) {
+            let contributions: any = {};
+            let totalAmount = 0;
+
+            if (group.id === mainArisanGroup.id) {
+                contributions.main = { amount: contributionSettings.main, paid: false };
+                contributions.cash = { amount: contributionSettings.cash, paid: false };
+                contributions.sick = { amount: contributionSettings.sick, paid: false };
+                contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
+                contributionSettings.others.forEach(other => {
+                    contributions[other.id] = { amount: other.amount, paid: false };
+                });
+                totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
+            } else {
+                totalAmount = group.contributionAmount;
+                // For simple groups, we can just use 'main' as the key
+                contributions.main = { amount: totalAmount, paid: false };
+            }
+
+            const newPaymentDoc = doc(collection(db, 'payments'));
+            batch.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
+            newPaymentsCount++;
+        }
+    });
+
+    if (newPaymentsCount > 0) {
+        await batch.commit().then(() => {
+            toast({
+                title: "Sinkronisasi Berhasil",
+                description: `${newPaymentsCount} catatan iuran baru telah dibuat untuk anggota yang belum terdaftar.`,
+            });
+        }).catch(serverError => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (batch create)', operation: 'create' }));
+        });
+    }
+
+    setIsGenerating(false);
+}, [db, selectedMonth, selectedGroup, allGroups, allMembers, contributionSettings, mainArisanGroup, toast]);
+
+useEffect(() => {
+    if (!isLoading) {
+        ensurePaymentsExistForMonth();
+    }
+}, [selectedMonth, selectedGroup, isLoading, ensurePaymentsExistForMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
+    if (!selectedGroup) return [];
     const [year, month] = selectedMonth.split('-').map(Number);
     return localChanges
       .filter(p => {
         const paymentDate = new Date(p.dueDate);
         return p.groupId === selectedGroup && getYear(paymentDate) === year && getMonth(paymentDate) === month;
       })
-      .map(p => ({ ...p, member: allMembers.find(m => m.id === p.memberId) }));
+      .map(p => ({ ...p, member: allMembers.find(m => m.id === p.memberId) }))
+      .filter(p => p.member); // Ensure member exists
   }, [localChanges, selectedGroup, selectedMonth, allMembers]);
 
   const filteredExpenses = useMemo(() => {
@@ -302,71 +380,6 @@ export default function KeuanganPage() {
     contributionSettings.others.forEach(other => { labels[other.id] = other.description; });
     return labels;
   }, [contributionSettings]);
-
-  const generatePaymentsForMonth = async () => {
-    if (!db || allGroups.length === 0 || allMembers.length === 0 || !contributionSettings) {
-        toast({ title: "Data Belum Siap", description: "Pastikan semua data anggota, grup, dan pengaturan sudah dimuat.", variant: "destructive" });
-        return;
-    }
-
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const targetDate = new Date(year, month);
-    const monthStr = format(targetDate, 'yyyy-MM');
-    const dueDate = endOfMonth(targetDate).toISOString();
-
-    const paymentsQuery = query(collection(db, 'payments'), 
-        where('dueDate', '>=', startOfMonth(targetDate).toISOString()),
-        where('dueDate', '<=', endOfMonth(targetDate).toISOString())
-    );
-
-    const querySnapshot = await getDocs(paymentsQuery);
-    const existingPayments = new Set(querySnapshot.docs.map(doc => `${doc.data().memberId}-${doc.data().groupId}`));
-    
-    const batch = writeBatch(db);
-    let newPaymentsCount = 0;
-
-    allGroups.forEach(group => {
-        group.memberIds.forEach(memberId => {
-            const paymentKey = `${memberId}-${group.id}`;
-            if (!existingPayments.has(paymentKey)) {
-                let contributions: any = {};
-                let totalAmount = 0;
-
-                if (group.id === mainArisanGroup?.id) {
-                    contributions.main = { amount: contributionSettings.main, paid: false };
-                    contributions.cash = { amount: contributionSettings.cash, paid: false };
-                    contributions.sick = { amount: contributionSettings.sick, paid: false };
-                    contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
-                    contributionSettings.others.forEach(other => {
-                        contributions[other.id] = { amount: other.amount, paid: false };
-                    });
-                    totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
-                } else {
-                    totalAmount = group.contributionAmount;
-                    contributions.main = { amount: totalAmount, paid: false };
-                }
-                
-                const newPaymentDoc = doc(collection(db, 'payments'));
-                batch.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
-                newPaymentsCount++;
-            }
-        });
-    });
-    
-    if (newPaymentsCount > 0) {
-        await batch.commit().then(() => {
-            toast({
-                title: "Catatan Iuran Dibuat",
-                description: `${newPaymentsCount} catatan iuran baru untuk ${format(targetDate, 'MMMM yyyy', {locale: id})} telah dibuat.`,
-            });
-        }).catch(serverError => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (batch create)', operation: 'create' }));
-        });
-    } else {
-        toast({ title: "Tidak Ada Catatan Baru", description: `Semua catatan iuran untuk bulan ${format(targetDate, 'MMMM yyyy', {locale: id})} sudah ada.` });
-    }
-  };
-
 
   // Payment handlers
   const handleDetailedPaymentChange = (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -455,10 +468,21 @@ export default function KeuanganPage() {
             <div className="flex flex-col min-h-screen">
                 <Header title="Pengelolaan Keuangan" />
                 <main className="flex-1 p-4 md:p-6 space-y-6">
-                    {isLoading || !contributionSettings || !mainArisanGroup ? (
-                        <div className="flex items-center justify-center h-full">
-                            <p>Memuat data keuangan...</p>
+                    {isLoading ? (
+                         <div className="flex items-center justify-center h-full pt-20">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <p className="ml-4 text-muted-foreground">Memuat data keuangan...</p>
                         </div>
+                    ) : !contributionSettings || !mainArisanGroup ? (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Data Belum Lengkap</CardTitle>
+                                <CardDescription>Pengaturan iuran atau grup utama belum ditemukan.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-muted-foreground">Harap pastikan Anda telah mengatur nominal iuran di halaman 'Ketetapan Iuran' dan grup 'Arisan Utama' sudah ada.</p>
+                            </CardContent>
+                        </Card>
                     ) : (
                         <Card>
                             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -493,23 +517,25 @@ export default function KeuanganPage() {
                                                     <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                                     <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                                     </Select>
-                                                    <>
-                                                        <Button onClick={generatePaymentsForMonth} variant="outline">Buat Catatan Iuran</Button>
-                                                        <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
-                                                    </>
+                                                    <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
                                                 </div>
                                             </CardHeader>
                                             <CardContent>
-                                                {filteredPayments.length > 0 ? (
+                                                {isGenerating ? (
+                                                     <div className="flex items-center justify-center h-60">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                                        <p className="ml-3 text-muted-foreground">Menyinkronkan data iuran...</p>
+                                                    </div>
+                                                ) : filteredPayments.length > 0 ? (
                                                     selectedGroup === mainArisanGroup.id ? (
                                                         <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                                                     ) : (
                                                         <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
                                                     )
                                                 ) : (
-                                                    <div className="text-center text-muted-foreground py-8">
-                                                        <p>Tidak ada data pembayaran untuk grup dan bulan ini.</p>
-                                                        <p className="text-xs mt-2">Anda bisa membuat catatan iuran secara manual menggunakan tombol di atas.</p>
+                                                    <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
+                                                        <p>Tidak ada anggota dalam grup ini untuk bulan yang dipilih.</p>
+                                                        <p className="text-xs mt-2">Silakan tambahkan anggota ke grup ini di halaman 'Kelola Grup & Anggota'.</p>
                                                     </div>
                                                 )}
                                             </CardContent>
@@ -557,4 +583,3 @@ export default function KeuanganPage() {
   );
 }
 
-    
