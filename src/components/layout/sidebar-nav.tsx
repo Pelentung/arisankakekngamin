@@ -56,13 +56,9 @@ export function SidebarNav() {
     <>
       <SidebarHeader>
         <div className="flex items-center gap-3 p-2">
-          <Image
-            src="https://png.pngtree.com/png-vector/20220805/ourmid/pngtree-vector-family-logo-modern-art-group-vector-png-image_28081440.png"
-            width={40}
-            height={40}
-            alt="Arisan Keluarga Logo"
-            className="rounded-lg"
-          />
+            <div className="rounded-lg bg-primary/20 p-2 text-primary">
+                <Users className="h-6 w-6" />
+            </div>
           <h1 className="font-headline text-lg font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-blue-500">
             ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
           </h1>

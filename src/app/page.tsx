@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldQuestion, User as UserIcon } from 'lucide-react';
+import { Loader2, ShieldQuestion, User as UserIcon, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AdminDashboard } from '@/components/dashboard/admin-dashboard';
 import { UserDashboard } from '@/components/dashboard/user-dashboard';
@@ -42,13 +42,17 @@ export default function HomePage() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsLoading(false);
-      if (currentUser?.isAnonymous) {
-        router.push('/laporan');
-      }
     });
 
     return () => unsubscribe();
-  }, [auth, router]);
+  }, [auth]);
+
+  useEffect(() => {
+    if (user?.isAnonymous) {
+      router.push('/laporan');
+    }
+  }, [user, router]);
+
 
   const handleUserLogin = async () => {
     if (!email || !password) {
@@ -126,14 +130,8 @@ export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 flex flex-col items-center text-center">
-        <div className="mb-4 rounded-lg bg-primary/20 p-4 text-primary">
-            <Image
-                src="https://png.pngtree.com/png-vector/20220805/ourmid/pngtree-vector-family-logo-modern-art-group-vector-png-image_28081440.png"
-                width={48}
-                height={48}
-                alt="Arisan Keluarga Logo"
-                className="rounded-lg"
-            />
+        <div className="mb-4 rounded-lg bg-primary/20 p-3 text-primary">
+            <Users className="h-10 w-10" />
         </div>
         <h1 className="font-headline text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-blue-500 sm:text-4xl">
           ARISAN KELUARGA BESAR
