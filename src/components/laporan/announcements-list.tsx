@@ -35,7 +35,7 @@ export function AnnouncementsList() {
           setCurrentIndex((prevIndex) => (prevIndex + 1) % announcements.length);
           setIsFading(false);
         }, 500); // Duration of the fade-out effect
-      }, 7000); // Change announcement every 7 seconds to allow for reading
+      }, 25000); // Change announcement every 25 seconds
 
       return () => clearInterval(intervalId);
     }
