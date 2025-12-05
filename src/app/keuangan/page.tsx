@@ -354,10 +354,10 @@ export default function KeuanganPage() {
 }, [db, selectedMonth, selectedGroup, allGroups, allMembers, contributionSettings, mainArisanGroup, toast]);
 
 useEffect(() => {
-    if (!isLoading) {
-        ensurePaymentsExistForMonth();
+    if (!isLoading && allMembers.length > 0 && allGroups.length > 0) {
+      ensurePaymentsExistForMonth();
     }
-}, [selectedMonth, selectedGroup, isLoading, ensurePaymentsExistForMonth]);
+  }, [selectedMonth, selectedGroup, isLoading, allMembers, allGroups, ensurePaymentsExistForMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -466,7 +466,7 @@ useEffect(() => {
   };
 
   const renderContent = () => {
-    if (isLoading || (allGroups.length > 0 && !mainArisanGroup)) {
+    if (isLoading || allGroups.length === 0) {
         return (
             <div className="flex items-center justify-center h-full pt-20">
                <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -600,3 +600,5 @@ useEffect(() => {
     </SidebarProvider>
   );
 }
+
+    
