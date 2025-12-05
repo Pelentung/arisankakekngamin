@@ -247,18 +247,25 @@ export default function KeuanganPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const mainArisanGroup = useMemo(() => allGroups.find(g => g.name === 'Arisan Utama'), [allGroups]);
-
   // Data fetching
   useEffect(() => {
     if (!db) return;
-    setIsLoading(true);
+    
+    let activeSubscriptions = 4;
+    const onSubEnd = () => {
+        activeSubscriptions--;
+        if (activeSubscriptions === 0) {
+            setIsLoading(false);
+        }
+    }
+
     const unsubPayments = subscribeToData(db, 'payments', (data) => { 
         setAllPayments(data as DetailedPayment[]); 
         setLocalChanges(data as DetailedPayment[]); 
+        onSubEnd();
     });
-    const unsubMembers = subscribeToData(db, 'members', (data) => setAllMembers(data as Member[]));
-    const unsubExpenses = subscribeToData(db, 'expenses', (data) => setAllExpenses(data as Expense[]));
+    const unsubMembers = subscribeToData(db, 'members', (data) => {setAllMembers(data as Member[]); onSubEnd();});
+    const unsubExpenses = subscribeToData(db, 'expenses', (data) => {setAllExpenses(data as Expense[]); onSubEnd();});
     const unsubGroups = subscribeToData(db, 'groups', (data) => {
       const groups = data as Group[];
       setAllGroups(groups);
@@ -266,20 +273,20 @@ export default function KeuanganPage() {
         const mainGroup = groups.find(g => g.name === 'Arisan Utama');
         setSelectedGroup(mainGroup ? mainGroup.id : groups[0].id);
       }
+      onSubEnd();
     });
-    const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => { if (data.length > 0) setContributionSettings(data[0] as ContributionSettings); });
-
-    Promise.all([
-        getDocs(collection(db, 'payments')),
-        getDocs(collection(db, 'members')),
-        getDocs(collection(db, 'groups')),
-        getDocs(collection(db, 'expenses')),
-        getDocs(collection(db, 'contributionSettings')),
-    ]).finally(() => setIsLoading(false));
+    const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => { 
+        if (data.length > 0) setContributionSettings(data[0] as ContributionSettings);
+        // This subscription is not critical for the initial load, so we don't call onSubEnd()
+    });
 
     return () => { unsubPayments(); unsubMembers(); unsubGroups(); unsubSettings(); unsubExpenses(); };
   }, [db]);
 
+  const mainArisanGroup = useMemo(() => {
+    if (allGroups.length === 0) return null;
+    return allGroups.find(g => g.name === 'Arisan Utama');
+  }, [allGroups]);
 
   const ensurePaymentsExistForMonth = useCallback(async () => {
     if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings || !mainArisanGroup) return;
@@ -295,11 +302,9 @@ export default function KeuanganPage() {
         return;
     }
     
-    // Get existing payments for the selected group (all time)
     const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
     const querySnapshot = await getDocs(paymentsQuery);
     
-    // Filter for the selected month on the client
     const paymentsForMonth = querySnapshot.docs.map(doc => doc.data() as DetailedPayment).filter(p => {
         const paymentDate = new Date(p.dueDate);
         return getYear(paymentDate) === year && getMonth(paymentDate) === month;
@@ -325,7 +330,6 @@ export default function KeuanganPage() {
                 totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
             } else {
                 totalAmount = group.contributionAmount;
-                // For simple groups, we can just use 'main' as the key
                 contributions.main = { amount: totalAmount, paid: false };
             }
 
@@ -461,6 +465,124 @@ useEffect(() => {
     }
   };
 
+  const renderContent = () => {
+    if (isLoading || (allGroups.length > 0 && !mainArisanGroup)) {
+        return (
+            <div className="flex items-center justify-center h-full pt-20">
+               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+               <p className="ml-4 text-muted-foreground">Memuat data keuangan...</p>
+           </div>
+       );
+    }
+
+    if (!contributionSettings || !mainArisanGroup) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Data Belum Lengkap</CardTitle>
+                    <CardDescription>Pengaturan iuran atau grup utama belum ditemukan.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">Harap pastikan Anda telah mengatur nominal iuran di halaman 'Ketetapan Iuran' dan grup 'Arisan Utama' sudah ada.</p>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                <CardTitle>Pengelolaan Keuangan Arisan</CardTitle>
+                <CardDescription>Kelola pemasukan dan pengeluaran arisan per bulan.</CardDescription>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-full sm:w-[200px]">
+                            <SelectValue placeholder="Pilih Bulan" />
+                        </SelectTrigger>
+                        <SelectContent>{monthOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <Tabs defaultValue="pemasukan">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="pemasukan">Pemasukan (Iuran)</TabsTrigger>
+                        <TabsTrigger value="pengeluaran">Pengeluaran</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="pemasukan">
+                        <Card>
+                            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <CardTitle>Detail Iuran Bulan Ini</CardTitle>
+                                    <CardDescription>Kelola status pembayaran untuk grup yang dipilih.</CardDescription>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                    <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                                    <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
+                                    <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {isGenerating ? (
+                                        <div className="flex items-center justify-center h-60">
+                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                        <p className="ml-3 text-muted-foreground">Menyinkronkan data iuran...</p>
+                                    </div>
+                                ) : filteredPayments.length > 0 ? (
+                                    selectedGroup === mainArisanGroup.id ? (
+                                        <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
+                                    ) : (
+                                        <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
+                                    )
+                                ) : (
+                                    <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
+                                        <p>Tidak ada anggota dalam grup ini untuk bulan yang dipilih.</p>
+                                        <p className="text-xs mt-2">Silakan tambahkan anggota ke grup ini di halaman 'Kelola Grup & Anggota'.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    <TabsContent value="pengeluaran">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle>Detail Pengeluaran</CardTitle>
+                                    <CardDescription>Catat semua pengeluaran pada bulan yang dipilih.</CardDescription>
+                                </div>
+                                <Button onClick={handleAddExpense}><PlusCircle className="mr-2 h-4 w-4" />Tambah Pengeluaran</Button>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Deskripsi</TableHead><TableHead>Kategori</TableHead><TableHead>Jumlah</TableHead><TableHead className="text-right">Tindakan</TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                    {filteredExpenses.length > 0 ? filteredExpenses.map((expense) => (
+                                        <TableRow key={expense.id}>
+                                        <TableCell>{format(new Date(expense.date), 'd MMMM yyyy', { locale: id })}</TableCell>
+                                        <TableCell className="font-medium">{expense.description}</TableCell>
+                                        <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
+                                        <TableCell>{formatCurrency(expense.amount)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                        </TableCell>
+                                        </TableRow>
+                                    )) : <TableRow><TableCell colSpan={5} className="text-center h-24">Tidak ada data pengeluaran untuk bulan ini.</TableCell></TableRow>}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
+            </CardContent>
+        </Card>
+    );
+  }
+
   return (
     <SidebarProvider>
         <Sidebar>
@@ -470,113 +592,7 @@ useEffect(() => {
             <div className="flex flex-col min-h-screen">
                 <Header title="Pengelolaan Keuangan" />
                 <main className="flex-1 p-4 md:p-6 space-y-6">
-                    {isLoading ? (
-                         <div className="flex items-center justify-center h-full pt-20">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <p className="ml-4 text-muted-foreground">Memuat data keuangan...</p>
-                        </div>
-                    ) : !contributionSettings || !mainArisanGroup ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Data Belum Lengkap</CardTitle>
-                                <CardDescription>Pengaturan iuran atau grup utama belum ditemukan.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muted-foreground">Harap pastikan Anda telah mengatur nominal iuran di halaman 'Ketetapan Iuran' dan grup 'Arisan Utama' sudah ada.</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <Card>
-                            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                <CardTitle>Pengelolaan Keuangan Arisan</CardTitle>
-                                <CardDescription>Kelola pemasukan dan pengeluaran arisan per bulan.</CardDescription>
-                                </div>
-                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                        <SelectTrigger className="w-full sm:w-[200px]">
-                                            <SelectValue placeholder="Pilih Bulan" />
-                                        </SelectTrigger>
-                                        <SelectContent>{monthOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <Tabs defaultValue="pemasukan">
-                                    <TabsList className="grid w-full grid-cols-2">
-                                        <TabsTrigger value="pemasukan">Pemasukan (Iuran)</TabsTrigger>
-                                        <TabsTrigger value="pengeluaran">Pengeluaran</TabsTrigger>
-                                    </TabsList>
-                                    <TabsContent value="pemasukan">
-                                        <Card>
-                                            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                                <div>
-                                                    <CardTitle>Detail Iuran Bulan Ini</CardTitle>
-                                                    <CardDescription>Kelola status pembayaran untuk grup yang dipilih.</CardDescription>
-                                                </div>
-                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                                    <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                                                    <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
-                                                    <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
-                                                    </Select>
-                                                    <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
-                                                </div>
-                                            </CardHeader>
-                                            <CardContent>
-                                                {isGenerating ? (
-                                                     <div className="flex items-center justify-center h-60">
-                                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                                        <p className="ml-3 text-muted-foreground">Menyinkronkan data iuran...</p>
-                                                    </div>
-                                                ) : filteredPayments.length > 0 ? (
-                                                    selectedGroup === mainArisanGroup.id ? (
-                                                        <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
-                                                    ) : (
-                                                        <SimplePaymentTable payments={filteredPayments} onStatusChange={handleSimpleStatusChange} />
-                                                    )
-                                                ) : (
-                                                    <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
-                                                        <p>Tidak ada anggota dalam grup ini untuk bulan yang dipilih.</p>
-                                                        <p className="text-xs mt-2">Silakan tambahkan anggota ke grup ini di halaman 'Kelola Grup & Anggota'.</p>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    </TabsContent>
-                                    <TabsContent value="pengeluaran">
-                                        <Card>
-                                            <CardHeader className="flex flex-row items-center justify-between">
-                                                <div>
-                                                    <CardTitle>Detail Pengeluaran</CardTitle>
-                                                    <CardDescription>Catat semua pengeluaran pada bulan yang dipilih.</CardDescription>
-                                                </div>
-                                                <Button onClick={handleAddExpense}><PlusCircle className="mr-2 h-4 w-4" />Tambah Pengeluaran</Button>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <Table>
-                                                    <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Deskripsi</TableHead><TableHead>Kategori</TableHead><TableHead>Jumlah</TableHead><TableHead className="text-right">Tindakan</TableHead></TableRow></TableHeader>
-                                                    <TableBody>
-                                                    {filteredExpenses.length > 0 ? filteredExpenses.map((expense) => (
-                                                        <TableRow key={expense.id}>
-                                                        <TableCell>{format(new Date(expense.date), 'd MMMM yyyy', { locale: id })}</TableCell>
-                                                        <TableCell className="font-medium">{expense.description}</TableCell>
-                                                        <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
-                                                        <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><MoreHorizontal className="h-4 w-4" /></Button>
-                                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
-                                                        </TableCell>
-                                                        </TableRow>
-                                                    )) : <TableRow><TableCell colSpan={5} className="text-center h-24">Tidak ada data pengeluaran untuk bulan ini.</TableCell></TableRow>}
-                                                    </TableBody>
-                                                </Table>
-                                            </CardContent>
-                                        </Card>
-                                    </TabsContent>
-                                </Tabs>
-                            </CardContent>
-                        </Card>
-                    )}
+                    {renderContent()}
                 </main>
             </div>
             {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
@@ -584,6 +600,3 @@ useEffect(() => {
     </SidebarProvider>
   );
 }
-
-
-    
