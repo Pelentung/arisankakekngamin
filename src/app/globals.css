@@ -8,7 +8,7 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 83%; /* #D4D4D4 */
+    --background: 0 0% 83%; /* #D3D3D3 */
     --foreground: 0 0% 3.9%;
     --card: 0 0% 88%; /* Lighter gray for cards */
     --card-foreground: 0 0% 3.9%;
@@ -33,13 +33,13 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 0 0% 78%; /* Slightly darker gray */
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 30 96% 44%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
+    --sidebar-accent: 0 0% 70%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 65%;
     --sidebar-ring: 35 88% 63%;
   }
   .dark {
