@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   getAuth,
@@ -22,7 +23,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Coins, Loader2, ShieldQuestion, User as UserIcon } from 'lucide-react';
+import { Loader2, ShieldQuestion, User as UserIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AdminDashboard } from '@/components/dashboard/admin-dashboard';
 import { UserDashboard } from '@/components/dashboard/user-dashboard';
@@ -126,7 +127,13 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 flex flex-col items-center text-center">
         <div className="mb-4 rounded-lg bg-primary/20 p-4 text-primary">
-          <Coins className="h-12 w-12" />
+            <Image
+                src="https://png.pngtree.com/png-vector/20240720/ourmid/pngtree-an-colorful-family-logo-with-a-person-holding-another-person-vector-png-image_7238686.png"
+                width={48}
+                height={48}
+                alt="Arisan Keluarga Logo"
+                className="rounded-lg"
+            />
         </div>
         <h1 className="font-headline text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-blue-500 sm:text-4xl">
           ARISAN KELUARGA BESAR
