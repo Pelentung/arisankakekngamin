@@ -294,15 +294,17 @@ export default function KeuanganPage() {
         setIsGenerating(false);
         return;
     }
-
-    // Get existing payments for the selected group and month
-    const paymentsQuery = query(collection(db, 'payments'),
-        where('groupId', '==', selectedGroup),
-        where('dueDate', '>=', startOfMonth(targetDate).toISOString()),
-        where('dueDate', '<=', endOfMonth(targetDate).toISOString())
-    );
+    
+    // Get existing payments for the selected group (all time)
+    const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
     const querySnapshot = await getDocs(paymentsQuery);
-    const existingMemberIds = new Set(querySnapshot.docs.map(doc => doc.data().memberId));
+    
+    // Filter for the selected month on the client
+    const paymentsForMonth = querySnapshot.docs.map(doc => doc.data() as DetailedPayment).filter(p => {
+        const paymentDate = new Date(p.dueDate);
+        return getYear(paymentDate) === year && getMonth(paymentDate) === month;
+    });
+    const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
 
     const batch = writeBatch(db);
     let newPaymentsCount = 0;
@@ -583,3 +585,5 @@ useEffect(() => {
   );
 }
 
+
+    
