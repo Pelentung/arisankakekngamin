@@ -133,8 +133,8 @@ export default function HomePage() {
         <div className="mb-4 rounded-lg bg-primary/20 p-3 text-primary">
             <Users className="h-10 w-10" />
         </div>
-        <h1 className="font-headline text-3xl font-extrabold tracking-tight text-primary sm:text-4xl">
-          ARISAN KELUARGA BESAR
+        <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl title-gradient">
+          ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
         </h1>
         <p className="text-muted-foreground">Alm. Kakek Ngamin</p>
       </div>

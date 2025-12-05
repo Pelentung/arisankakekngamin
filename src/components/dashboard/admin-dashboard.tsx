@@ -20,7 +20,7 @@ export function AdminDashboard() {
                     <Header title="Menu Utama" />
                     <main className="flex-1 p-4 md:p-6 space-y-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <h1 className="font-headline text-3xl font-extrabold tracking-tight text-primary sm:text-4xl">
+                            <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl title-gradient">
                                 ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
                             </h1>
                             <RealTimeClock />
