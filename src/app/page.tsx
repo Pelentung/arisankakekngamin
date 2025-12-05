@@ -183,7 +183,7 @@ export default function HomePage() {
             variant="secondary"
             className="w-full"
             onClick={handleGuestLogin}
-            disabled={isLoggingइन}
+            disabled={isLoggingIn}
           >
             {isLoggingIn ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
