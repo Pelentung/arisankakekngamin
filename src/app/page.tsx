@@ -117,15 +117,15 @@ export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 overflow-x-hidden">
       <div className="mb-8 flex w-full flex-col items-center text-center">
-        <div className="mb-4 rounded-lg bg-primary/20 h-16 w-16 overflow-hidden">
+        <div className="mb-4 rounded-lg bg-primary/20 h-16 w-16 overflow-hidden flex items-center justify-center p-0">
             <Image src="https://i.imgur.com/Euyh8nM.png" alt="App Logo" width={64} height={64} className="object-cover w-full h-full"/>
         </div>
         <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--primary)),45%,hsl(var(--accent)),55%,hsl(var(--primary)))] bg-[length:200%_100%] bg-clip-text text-transparent">
-          ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
+          ARISAN KELUARGA Alm. KAKEK NGAMIN
         </h1>
         <div className="w-full overflow-hidden">
             <p className="animate-marquee-slow whitespace-nowrap">
-              <span className="animate-shimmer bg-[linear-gradient(110deg,hsl(var(--muted-foreground)),45%,hsl(var(--foreground)),55%,hsl(var(--muted-foreground)))] bg-[length:200%_100%] bg-clip-text text-transparent font-bold">Indahnya Tali Persaudaraan</span>
+              <span className="font-bold animate-shimmer bg-[linear-gradient(110deg,hsl(var(--primary)),45%,hsl(var(--accent)),55%,hsl(var(--primary)))] bg-[length:200%_100%] bg-clip-text text-transparent">Indahnya Tali Persaudaraan</span>
             </p>
         </div>
       </div>

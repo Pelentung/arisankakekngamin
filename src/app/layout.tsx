@@ -6,7 +6,7 @@ import { FirebaseClientProvider } from '@/firebase/client-provider';
 
 export const metadata: Metadata = {
   title: 'Arisan Alm. Kakek Ngamin',
-  description: 'Manajemen Keuangan Arisan Keluarga Besar Alm. Kakek Ngamin',
+  description: 'Manajemen Keuangan Arisan Keluarga Alm. Kakek Ngamin',
   manifest: '/manifest.json',
 };
 

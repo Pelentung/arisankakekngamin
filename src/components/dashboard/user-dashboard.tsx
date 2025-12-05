@@ -25,7 +25,7 @@ export function UserDashboard() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <Header title="Selamat Datang di Arisan Keluarga Besar Kami" isMarquee />
+            <Header title="Selamat Datang di Arisan Keluarga Alm. Kakek Ngamin" isMarquee />
             <main className="flex-1 p-4 md:p-6 space-y-6">
                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="flex items-center gap-4">
@@ -33,7 +33,7 @@ export function UserDashboard() {
                            <Image src="https://i.imgur.com/Euyh8nM.png" alt="App Logo" width={48} height={48} className="object-cover w-full h-full"/>
                         </div>
                         <h1 className="font-headline text-2xl font-extrabold tracking-tight sm:text-3xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--primary)),45%,hsl(var(--accent)),55%,hsl(var(--primary)))] bg-[length:200%_100%] bg-clip-text text-transparent">
-                            ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
+                            ARISAN KELUARGA Alm. KAKEK NGAMIN
                         </h1>
                     </div>
                     <div className="flex items-center gap-4 self-end sm:self-center">
