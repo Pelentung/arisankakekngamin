@@ -41,10 +41,8 @@ export default function HomePage() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsLoading(false);
-      if (currentUser) {
-        if (currentUser.isAnonymous) {
-          router.push('/laporan');
-        }
+      if (currentUser?.isAnonymous) {
+        router.push('/laporan');
       }
     });
 
