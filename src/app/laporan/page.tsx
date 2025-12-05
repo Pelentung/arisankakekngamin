@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { initializeFirebase } from '@/firebase';
+import { useFirestore, initializeFirebase } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { MonthlyReport } from '@/components/laporan/monthly-report';
@@ -13,26 +13,42 @@ import { SidebarNav } from '@/components/layout/sidebar-nav';
 import { UserDashboard } from '@/components/dashboard/user-dashboard';
 import { Loader2 } from 'lucide-react';
 import { AnnouncementsList } from '@/components/laporan/announcements-list';
+import { subscribeToData, unsubscribeAll } from '@/app/data';
+
 
 export default function LaporanPage() {
   const { auth } = initializeFirebase();
+  const db = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) {
-        // If not logged in, redirect to login page
-        router.push('/');
-      } else {
-        setUser(currentUser);
-      }
-      setIsLoading(false);
-    });
+    if (!db) return;
 
-    return () => unsubscribe();
-  }, [auth, router]);
+    const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsLoading(false);
+       if (!currentUser) {
+         router.push('/');
+       }
+    });
+    
+    // Subscribe to all necessary data for reports
+    const unsubAnnouncements = subscribeToData(db, 'announcements', () => {});
+    const unsubPayments = subscribeToData(db, 'payments', () => {});
+    const unsubExpenses = subscribeToData(db, 'expenses', () => {});
+    const unsubGroups = subscribeToData(db, 'groups', () => {});
+    const unsubMembers = subscribeToData(db, 'members', () => {});
+    const unsubSettings = subscribeToData(db, 'contributionSettings', () => {});
+
+
+    return () => {
+      authUnsubscribe();
+      // Unsubscribe from all data listeners on component unmount
+      unsubscribeAll();
+    };
+  }, [auth, router, db]);
   
   if (isLoading) {
     return (
@@ -47,30 +63,30 @@ export default function LaporanPage() {
     return null;
   }
 
-  if (user.isAnonymous) {
-    // Guest user view
-    return <UserDashboard />;
+  // Regular user (admin) view
+  if (!user.isAnonymous) {
+      return (
+        <SidebarProvider>
+          <Sidebar>
+            <SidebarNav />
+          </Sidebar>
+          <SidebarInset>
+            <div className="flex flex-col min-h-screen">
+              <Header title="Laporan & Pengumuman" />
+              <main className="flex-1 p-4 md:p-6 space-y-6">
+                <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
+                  Laporan, Riwayat & Pengumuman
+                </h1>
+                <AnnouncementsList />
+                <MonthlyReport />
+                <WinnerHistory />
+              </main>
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
+      );
   }
 
-  // Regular user view (can see reports but also has full sidebar)
-  return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarNav />
-      </Sidebar>
-      <SidebarInset>
-        <div className="flex flex-col min-h-screen">
-          <Header title="Laporan & Pengumuman" />
-          <main className="flex-1 p-4 md:p-6 space-y-6">
-            <h1 className="font-headline text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl">
-              Laporan, Riwayat & Pengumuman
-            </h1>
-            <AnnouncementsList />
-            <MonthlyReport />
-            <WinnerHistory />
-          </main>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  );
+  // Guest user view
+  return <UserDashboard />;
 }

@@ -55,9 +55,9 @@ export function SidebarNav() {
     <>
       <SidebarHeader>
         <div className="flex items-center gap-3 p-2">
-            <div className="rounded-lg bg-primary/20 p-2 text-primary">
-                <Users className="h-6 w-6" />
-            </div>
+          <div className="rounded-lg bg-primary/20 p-2 text-primary">
+            <Users className="h-6 w-6" />
+          </div>
           <h1 className="font-headline text-lg font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-blue-500">
             ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
           </h1>
@@ -85,25 +85,25 @@ export function SidebarNav() {
       <SidebarFooter className="p-2">
         <Separator className="my-2" />
         <SidebarMenu>
-            <SidebarMenuItem>
-                <SidebarMenuButton
-                asChild
-                isActive={pathname === '/admin'}
-                tooltip={'Ketetapan Iuran'}
-                onClick={() => setOpenMobile(false)}
-                >
-                <Link href="/admin">
-                    <Shield />
-                    <span>Ketetapan Iuran</span>
-                </Link>
-                </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-                <SidebarMenuButton onClick={handleSignOut} tooltip="Keluar">
-                    <LogOut />
-                    <span>Keluar</span>
-                </SidebarMenuButton>
-            </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === '/admin'}
+              tooltip={'Ketetapan Iuran'}
+              onClick={() => setOpenMobile(false)}
+            >
+              <Link href="/admin">
+                <Shield />
+                <span>Ketetapan Iuran</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleSignOut} tooltip="Keluar">
+              <LogOut />
+              <span>Keluar</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </>
