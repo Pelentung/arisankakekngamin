@@ -429,16 +429,22 @@ export default function KeuanganPage() {
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
-    if (!selectedGroup) return [];
+    const group = allGroups.find(g => g.id === selectedGroup);
+    if (!group) return [];
+
     const [year, month] = selectedMonth.split('-').map(Number);
     return localChanges
       .filter(p => {
         const paymentDate = new Date(p.dueDate);
-        return p.groupId === selectedGroup && getYear(paymentDate) === year && getMonth(paymentDate) === month;
+        // Filter by group, month, and ensure the member is still in the group
+        return p.groupId === selectedGroup &&
+               getYear(paymentDate) === year &&
+               getMonth(paymentDate) === month &&
+               group.memberIds.includes(p.memberId);
       })
       .map(p => ({ ...p, member: allMembers.find(m => m.id === p.memberId) }))
-      .filter(p => p.member); // Ensure member exists
-  }, [localChanges, selectedGroup, selectedMonth, allMembers]);
+      .filter(p => p.member); // Ensure member exists and hasn't been deleted from the main members list
+  }, [localChanges, selectedGroup, selectedMonth, allMembers, allGroups]);
 
   const filteredExpenses = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -686,5 +692,3 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
-
-    
