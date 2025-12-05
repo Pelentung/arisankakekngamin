@@ -120,7 +120,7 @@ export default function HomePage() {
         <div className="mb-4 rounded-lg bg-primary/20 h-16 w-16 overflow-hidden">
             <Image src="https://i.imgur.com/Euyh8nM.png" alt="App Logo" width={64} height={64} className="object-cover w-full h-full"/>
         </div>
-        <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--muted-foreground)),45%,hsl(var(--foreground)),55%,hsl(var(--muted-foreground)))] bg-[length:200%_100%] bg-clip-text text-transparent">
+        <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--primary)),45%,hsl(var(--accent)),55%,hsl(var(--primary)))] bg-[length:200%_100%] bg-clip-text text-transparent">
           ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
         </h1>
         <div className="w-full overflow-hidden">

@@ -20,7 +20,7 @@ export function AdminDashboard() {
                     <Header title="Menu Utama" />
                     <main className="flex-1 p-4 md:p-6 space-y-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--muted-foreground)),45%,hsl(var(--foreground)),55%,hsl(var(--muted-foreground)))] bg-[length:200%_100%] bg-clip-text text-transparent">
+                            <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl animate-shimmer bg-[linear-gradient(110deg,hsl(var(--primary)),45%,hsl(var(--accent)),55%,hsl(var(--primary)))] bg-[length:200%_100%] bg-clip-text text-transparent">
                                 ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
                             </h1>
                             <RealTimeClock />
