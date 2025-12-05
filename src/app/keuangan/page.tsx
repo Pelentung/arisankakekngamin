@@ -251,10 +251,14 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db) return;
     
+    let isDataLoaded = false;
     const onDataLoaded = () => {
       // Check if all essential data is loaded
       if (allPayments.length > 0 && allMembers.length > 0 && allGroups.length > 0 && contributionSettings) {
-        setIsLoading(false);
+        if (!isDataLoaded) {
+            setIsLoading(false);
+            isDataLoaded = true;
+        }
       }
     };
 
@@ -283,7 +287,7 @@ export default function KeuanganPage() {
     onDataLoaded();
 
     return () => { unsubPayments(); unsubMembers(); unsubGroups(); unsubSettings(); unsubExpenses(); };
-  }, [db]); // This effect should run only once when the DB is available
+  }, [db, selectedGroup, allGroups.length, allMembers.length, allPayments.length, contributionSettings]); 
 
   const mainArisanGroup = useMemo(() => {
     if (allGroups.length === 0) return null;
@@ -360,10 +364,10 @@ export default function KeuanganPage() {
 
 useEffect(() => {
     // Run this effect when relevant data changes, not just on initial load.
-    if (!isLoading && db && selectedGroup && allMembers.length > 0 && contributionSettings && mainArisanGroup) {
+    if (!isLoading && db && selectedGroup && allMembers.length > 0 && allGroups.length > 0 && contributionSettings && mainArisanGroup) {
       ensurePaymentsExistForMonth();
     }
-  }, [isLoading, db, selectedGroup, allMembers, allGroups, contributionSettings, mainArisanGroup, ensurePaymentsExistForMonth]);
+  }, [isLoading, db, selectedGroup, allMembers, allGroups, contributionSettings, mainArisanGroup, ensurePaymentsExistForMonth, selectedMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -404,13 +408,13 @@ useEffect(() => {
           [contributionType]: { ...p.contributions[contributionType], paid: isPaid } 
         };
         
-        // New logic: Status is "Paid" if main and cash contributions are paid.
-        const isConsideredPaid = updatedContributions.main?.paid && updatedContributions.cash?.paid;
+        // Original logic: Status is "Paid" only if ALL contributions are paid.
+        const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
 
         return { 
           ...p, 
           contributions: updatedContributions, 
-          status: isConsideredPaid ? 'Paid' : 'Unpaid' 
+          status: allContributionsPaid ? 'Paid' : 'Unpaid' 
         };
       })
     );
@@ -618,3 +622,4 @@ useEffect(() => {
   );
 }
 
+    
