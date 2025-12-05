@@ -64,7 +64,7 @@ export function AnnouncementsList() {
       {currentAnnouncement && (
         <div className="text-foreground">
           <h3 className="font-bold text-lg mb-2">{currentAnnouncement.title}</h3>
-          <p className="text-sm text-primary whitespace-pre-wrap animate-blink">{currentAnnouncement.content}</p>
+          <p className="text-lg text-primary whitespace-pre-wrap animate-blink">{currentAnnouncement.content}</p>
         </div>
       )}
     </div>
