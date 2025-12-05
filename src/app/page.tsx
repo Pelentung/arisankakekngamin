@@ -123,8 +123,10 @@ export default function HomePage() {
         <h1 className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl title-gradient">
           ARISAN KELUARGA BESAR Alm. KAKEK NGAMIN
         </h1>
-        <div className="w-full overflow-hidden whitespace-nowrap">
-            <p className="animate-shimmer bg-[linear-gradient(110deg,hsl(var(--muted-foreground)),45%,hsl(var(--foreground)),55%,hsl(var(--muted-foreground)))] bg-[length:200%_100%] bg-clip-text text-transparent inline-block font-bold">Indahnya Tali Persaudaraan</p>
+        <div className="w-full overflow-hidden">
+            <p className="animate-marquee-slow whitespace-nowrap">
+              <span className="animate-shimmer bg-[linear-gradient(110deg,hsl(var(--muted-foreground)),45%,hsl(var(--foreground)),55%,hsl(var(--muted-foreground)))] bg-[length:200%_100%] bg-clip-text text-transparent font-bold">Indahnya Tali Persaudaraan</span>
+            </p>
         </div>
       </div>
 
