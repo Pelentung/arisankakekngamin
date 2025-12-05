@@ -89,13 +89,8 @@ body {
 
 @layer components {
   .title-gradient {
-    background: linear-gradient(to right, hsl(var(--primary)), #43a2f0);
+    background: linear-gradient(to right, hsl(var(--primary)), hsl(var(--accent)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 
-      -1px -1px 0 #c0c0c0,  
-       1px -1px 0 #c0c0c0,
-      -1px  1px 0 #c0c0c0,
-       1px  1px 0 #c0c0c0; /* Fake silver stroke */
   }
 }
