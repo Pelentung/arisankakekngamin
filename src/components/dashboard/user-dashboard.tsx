@@ -1,10 +1,9 @@
-
 'use client';
 
 import { Header } from '@/components/layout/header';
 import { MonthlyReport } from '@/components/laporan/monthly-report';
 import { Button } from '../ui/button';
-import { LogOut, Megaphone, Trophy, ClipboardList } from 'lucide-react';
+import { LogOut, Megaphone, Trophy, ClipboardList, Users } from 'lucide-react';
 import { initializeFirebase } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { WinnerHistory } from './winner-history';
@@ -12,6 +11,7 @@ import { AnnouncementsList } from '../laporan/announcements-list';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../ui/card';
 import { RealTimeClock } from './real-time-clock';
 import Image from 'next/image';
+import { AllMembersList } from './all-members-list';
 
 
 export function UserDashboard() {
@@ -71,6 +71,16 @@ export function UserDashboard() {
                     </CardHeader>
                     <CardContent>
                         <WinnerHistory />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="uppercase text-blue-600">Daftar Semua Anggota</CardTitle>
+                        <CardDescription>Informasi semua anggota yang terdaftar dalam sistem arisan.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AllMembersList />
                     </CardContent>
                 </Card>
             </main>
