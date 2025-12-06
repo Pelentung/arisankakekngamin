@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -70,7 +71,6 @@ export function CurrentWinnerCard() {
           </div>
           <div>
             <CardTitle className="uppercase text-amber-600">Anggota yang Menarik Bulan Ini</CardTitle>
-            <CardDescription>Pemenang undian arisan utama untuk periode saat ini.</CardDescription>
           </div>
         </div>
       </CardHeader>

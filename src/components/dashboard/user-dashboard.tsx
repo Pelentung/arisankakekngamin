@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -70,7 +71,6 @@ export function UserDashboard() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="uppercase text-blue-600">Anggota Yang Sudah Narik</CardTitle>
-                        <CardDescription>Daftar anggota yang sudah pernah memenangkan undian di setiap grup.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <WinnerHistory />
