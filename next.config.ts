@@ -8,6 +8,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   start_url: '/',
 });
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   /* config options here */
   typescript: {
@@ -62,4 +63,4 @@ const nextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+module.exports = withPWA(nextConfig);
