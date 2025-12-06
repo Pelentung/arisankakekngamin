@@ -1,5 +1,4 @@
 
-import type {NextConfig} from 'next';
 
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
@@ -9,7 +8,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   start_url: '/',
 });
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
