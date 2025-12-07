@@ -293,6 +293,8 @@ export default function KeuanganPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const isSyncingRef = useRef(false);
+
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -310,7 +312,7 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db || !user) return;
     
-    const dataLoaded = { payments: false, members: false, groups: false, expenses: false };
+    const dataLoaded = { payments: false, members: false, groups: false, expenses: false, settings: false };
     const checkAllDataLoaded = () => {
         if (Object.values(dataLoaded).every(Boolean)) {
             setIsLoading(false);
@@ -343,12 +345,36 @@ export default function KeuanganPage() {
       dataLoaded.groups = true; checkAllDataLoaded();
     });
 
+     const fetchSettings = async () => {
+        const docId = selectedMonth.split('-').join('-');
+        const docRef = doc(db, 'contributionSettings', docId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            setContributionSettings(docSnap.data() as ContributionSettings);
+        } else {
+            const lastMonthDate = subMonths(new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1])), 1);
+            const lastMonthId = `${getYear(lastMonthDate)}-${getMonth(lastMonthDate)}`;
+            const lastMonthDocRef = doc(db, 'contributionSettings', lastMonthId);
+            const lastMonthSnap = await getDoc(lastMonthDocRef);
+
+            if (lastMonthSnap.exists()) {
+                setContributionSettings(lastMonthSnap.data() as ContributionSettings);
+            } else {
+                setContributionSettings(null);
+            }
+        }
+        dataLoaded.settings = true; checkAllDataLoaded();
+    }
+    fetchSettings();
+
+
     return () => { 
         unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses(); 
     };
-  }, [db, user, selectedGroup]); 
+  }, [db, user]); 
   
-  // Fetch contribution settings based on selected month
+  // Fetch contribution settings separately when month changes
   useEffect(() => {
     if (!db || !selectedMonth || !user) return;
 
@@ -370,27 +396,24 @@ export default function KeuanganPage() {
                 setContributionSettings(lastMonthSnap.data() as ContributionSettings);
                 toast({ title: "Info", description: `Pengaturan untuk bulan ini tidak ditemukan, menggunakan pengaturan dari ${format(lastMonthDate, 'MMMM yyyy', {locale: id})}.`});
             } else {
-                // Fallback to default if no monthly setting exists
                 toast({ title: "Peringatan", description: `Pengaturan iuran untuk bulan ini tidak ditemukan, harap atur di halaman Ketetapan Iuran.`, variant: "destructive" });
                 setContributionSettings(null);
             }
         }
     }
     fetchSettings();
-  }, [db, selectedMonth, toast, user]);
+  }, [db, selectedMonth, user, toast]);
 
 const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup || !contributionSettings) {
-        toast({ title: "Sinkronisasi Gagal", description: "Database, grup, atau pengaturan iuran belum siap.", variant: "destructive" });
+    if (isSyncingRef.current || !db || !selectedGroup || !contributionSettings || allGroups.length === 0) {
         return;
     }
 
+    isSyncingRef.current = true;
     setIsGenerating(true);
+    
     try {
         await runTransaction(db, async (transaction) => {
-            if (!selectedGroup) throw new Error("Grup belum dipilih.");
-            if (!contributionSettings) throw new Error("Pengaturan iuran untuk bulan ini belum ada. Silakan atur di halaman 'Ketetapan Iuran'.");
-
             const group = allGroups.find(g => g.id === selectedGroup);
             if (!group) throw new Error("Grup tidak ditemukan");
             
@@ -406,9 +429,7 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
             });
 
             const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
-            let newPaymentsCount = 0;
-            let updatedPaymentsCount = 0;
-
+            
             // Check existing payments for correctness
             paymentsForMonth.forEach(payment => {
                 let needsUpdate = false;
@@ -442,7 +463,6 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                         totalAmount: recalculatedTotal,
                         status: updatedStatus
                     });
-                    updatedPaymentsCount++;
                 }
             });
             
@@ -470,24 +490,8 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
             
                     const newPaymentDoc = doc(collection(db, 'payments'));
                     transaction.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
-                    newPaymentsCount++;
                 }
             });
-
-            if (newPaymentsCount > 0 || updatedPaymentsCount > 0) {
-                let descriptions = [];
-                if (newPaymentsCount > 0) descriptions.push(`${newPaymentsCount} catatan iuran baru dibuat.`);
-                if (updatedPaymentsCount > 0) descriptions.push(`${updatedPaymentsCount} catatan iuran diperbarui.`);
-                toast({
-                    title: "Sinkronisasi Selesai",
-                    description: descriptions.join(' '),
-                });
-            } else {
-                toast({
-                    title: "Sinkronisasi Selesai",
-                    description: "Tidak ada catatan iuran baru yang perlu dibuat atau diperbarui.",
-                });
-            }
         });
     } catch (error: any) {
         console.error("Error ensuring payments exist:", error);
@@ -497,8 +501,17 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
         }
     } finally {
         setIsGenerating(false);
+        isSyncingRef.current = false;
+        toast({ title: "Sinkronisasi Iuran Selesai", description: "Data iuran telah diperbarui dan disinkronkan." });
     }
 }, [db, selectedGroup, selectedMonth, allGroups, mainArisanGroup, contributionSettings, toast]);
+
+useEffect(() => {
+    // Automatically run sync when dependencies are ready
+    if (!isGenerating && !isLoading && contributionSettings) {
+        ensurePaymentsExistForMonth();
+    }
+}, [selectedGroup, selectedMonth, contributionSettings, isLoading, isGenerating, ensurePaymentsExistForMonth]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -688,10 +701,6 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                     <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                     <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <Button onClick={ensurePaymentsExistForMonth} disabled={isGenerating || !contributionSettings} className="w-full sm:w-auto">
-                                        {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                        Sinkronkan Iuran
-                                    </Button>
                                     <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
                                 </div>
                             </CardHeader>
@@ -710,7 +719,7 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                 ) : (
                                     <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
                                         <p>Tidak ada data iuran untuk ditampilkan.</p>
-                                        <p className="text-xs mt-2">Pastikan anggota sudah ditambahkan ke grup, lalu klik 'Sinkronkan Iuran'.</p>
+                                        <p className="text-xs mt-2">Pastikan anggota sudah ditambahkan ke grup, lalu data akan tersinkronisasi secara otomatis.</p>
                                     </div>
                                 )}
                             </CardContent>
