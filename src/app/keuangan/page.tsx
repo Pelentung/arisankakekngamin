@@ -342,84 +342,121 @@ export default function KeuanganPage() {
   }, [db, selectedMonth, toast, user]);
 
   const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup || !mainArisanGroup || allMembers.length === 0 || !contributionSettings) return;
-    
+    if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings) return;
+  
     const syncKey = `${selectedGroup}-${selectedMonth}`;
     if (syncTracker.current.has(syncKey)) {
-        return; // Already synced for this combination
+      return;
     }
-
+  
     setIsGenerating(true);
-
+  
     try {
-        const group = allGroups.find(g => g.id === selectedGroup);
-        if (!group) {
-             throw new Error("Grup tidak ditemukan");
-        }
+      const group = allGroups.find(g => g.id === selectedGroup);
+      if (!group) {
+        throw new Error("Grup tidak ditemukan");
+      }
+  
+      const settingsForMonth = contributionSettings;
+      const [year, month] = selectedMonth.split('-').map(Number);
+      
+      const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
+      const querySnapshot = await getDocs(paymentsQuery);
+  
+      const paymentsForGroup = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetailedPayment));
+      const paymentsForMonth = paymentsForGroup.filter(p => {
+        const paymentDate = new Date(p.dueDate);
+        return getYear(paymentDate) === year && getMonth(paymentDate) === month;
+      });
+  
+      const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
+      const batch = writeBatch(db);
+      let newPaymentsCount = 0;
+      let updatedPaymentsCount = 0;
+  
+      // Check existing payments for correctness
+      paymentsForMonth.forEach(payment => {
+          let needsUpdate = false;
+          const newContributions: any = {};
+          let newTotalAmount = 0;
 
-        const currentMonthSettings = contributionSettings;
+          if (group.id === mainArisanGroup?.id) {
+              newContributions.main = { amount: settingsForMonth.main, paid: payment.contributions.main?.paid || false };
+              newContributions.cash = { amount: settingsForMonth.cash, paid: payment.contributions.cash?.paid || false };
+              newContributions.sick = { amount: settingsForMonth.sick, paid: payment.contributions.sick?.paid || false };
+              newContributions.bereavement = { amount: settingsForMonth.bereavement, paid: payment.contributions.bereavement?.paid || false };
+              settingsForMonth.others.forEach(other => {
+                  newContributions[other.id] = { amount: other.amount, paid: payment.contributions[other.id]?.paid || false };
+              });
+              newTotalAmount = Object.values(newContributions).reduce((sum, c: any) => sum + c.amount, 0);
+          } else {
+              newTotalAmount = group.contributionAmount;
+              newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
+          }
+          
+          if (payment.totalAmount !== newTotalAmount) {
+              needsUpdate = true;
+          }
 
-        const [year, month] = selectedMonth.split('-').map(Number);
-        const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
-        const querySnapshot = await getDocs(paymentsQuery);
-        
-        const paymentsForGroup = querySnapshot.docs.map(doc => doc.data() as DetailedPayment);
-        const paymentsForMonth = paymentsForGroup.filter(p => {
-            const paymentDate = new Date(p.dueDate);
-            return getYear(paymentDate) === year && getMonth(paymentDate) === month;
-        });
-
-        const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
-        const batch = writeBatch(db);
-        let newPaymentsCount = 0;
-
-        group.memberIds.forEach(memberId => {
-            if (!existingMemberIds.has(memberId)) {
-                let contributions: any = {};
-                let totalAmount = 0;
-                const targetDate = new Date(year, month);
-                const dueDate = endOfMonth(targetDate).toISOString();
-
-                if (group.id === mainArisanGroup.id) {
-                    contributions.main = { amount: currentMonthSettings.main, paid: false };
-                    contributions.cash = { amount: currentMonthSettings.cash, paid: false };
-                    contributions.sick = { amount: currentMonthSettings.sick, paid: false };
-                    contributions.bereavement = { amount: currentMonthSettings.bereavement, paid: false };
-                    currentMonthSettings.others.forEach(other => {
-                        contributions[other.id] = { amount: other.amount, paid: false };
-                    });
-                    totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
-                } else {
-                    totalAmount = group.contributionAmount;
-                    contributions.main = { amount: totalAmount, paid: false };
-                }
-
-                const newPaymentDoc = doc(collection(db, 'payments'));
-                batch.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
-                newPaymentsCount++;
-            }
-        });
-
-        if (newPaymentsCount > 0) {
-            await batch.commit();
-            toast({
-                title: "Sinkronisasi Berhasil",
-                description: `${newPaymentsCount} catatan iuran baru telah dibuat.`,
+          if (needsUpdate) {
+              const paymentRef = doc(db, 'payments', payment.id);
+              batch.update(paymentRef, { contributions: newContributions, totalAmount: newTotalAmount });
+              updatedPaymentsCount++;
+          }
+      });
+      
+      // Create new payments for members not in the list
+      group.memberIds.forEach(memberId => {
+        if (!existingMemberIds.has(memberId)) {
+          let contributions: any = {};
+          let totalAmount = 0;
+          const targetDate = new Date(year, month);
+          const dueDate = endOfMonth(targetDate).toISOString();
+  
+          if (group.id === mainArisanGroup?.id) {
+            contributions.main = { amount: settingsForMonth.main, paid: false };
+            contributions.cash = { amount: settingsForMonth.cash, paid: false };
+            contributions.sick = { amount: settingsForMonth.sick, paid: false };
+            contributions.bereavement = { amount: settingsForMonth.bereavement, paid: false };
+            settingsForMonth.others.forEach(other => {
+              contributions[other.id] = { amount: other.amount, paid: false };
             });
+            totalAmount = Object.values(contributions).reduce((sum, c: any) => sum + c.amount, 0);
+          } else {
+            totalAmount = group.contributionAmount;
+            contributions.main = { amount: totalAmount, paid: false };
+          }
+  
+          const newPaymentDoc = doc(collection(db, 'payments'));
+          batch.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
+          newPaymentsCount++;
         }
-        syncTracker.current.add(syncKey);
+      });
+  
+      if (newPaymentsCount > 0 || updatedPaymentsCount > 0) {
+        await batch.commit();
+        let descriptions = [];
+        if (newPaymentsCount > 0) descriptions.push(`${newPaymentsCount} catatan iuran baru dibuat.`);
+        if (updatedPaymentsCount > 0) descriptions.push(`${updatedPaymentsCount} catatan iuran diperbarui.`);
+        toast({
+          title: "Sinkronisasi Selesai",
+          description: descriptions.join(' '),
+        });
+      }
+      syncTracker.current.add(syncKey);
     } catch (error: any) {
-        console.error("Error ensuring payments exist:", error);
-        toast({ title: "Sinkronisasi Gagal", description: error.message || "Terjadi galat saat membuat catatan iuran.", variant: "destructive" });
-        if (error instanceof FirestorePermissionError) {
-             errorEmitter.emit('permission-error', error);
-        } else {
-             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (batch create)', operation: 'create' }));
-        }
+      console.error("Error ensuring payments exist:", error);
+      toast({ title: "Sinkronisasi Gagal", description: error.message || "Terjadi galat saat membuat/memperbarui catatan iuran.", variant: "destructive" });
+      if (error instanceof FirestorePermissionError) {
+        errorEmitter.emit('permission-error', error);
+      } else {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (batch write)', operation: 'write' }));
+      }
     } finally {
-        setIsGenerating(false);
+      setIsGenerating(false);
     }
   }, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, contributionSettings, toast]);
+  
 
   useEffect(() => {
     if (!isLoading && contributionSettings && user) {
@@ -473,10 +510,12 @@ export default function KeuanganPage() {
         };
         
         const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
+        const newTotalAmount = Object.values(updatedContributions).reduce((sum, c: any) => sum + c.amount, 0);
 
         return { 
           ...p, 
-          contributions: updatedContributions, 
+          contributions: updatedContributions,
+          totalAmount: newTotalAmount,
           status: allContributionsPaid ? 'Paid' : 'Unpaid' 
         };
       })
@@ -692,3 +731,4 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
+
