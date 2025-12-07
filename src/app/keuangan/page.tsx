@@ -27,7 +27,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { MoreHorizontal, PlusCircle, Loader2, Edit, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Edit, Trash2, RefreshCw } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -71,13 +71,14 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
     let grandTotal = 0;
 
     payments.forEach(payment => {
-        grandTotal += payment.totalAmount;
         contributionKeys.forEach(key => {
-            if (payment.contributions[key]) {
+            if (payment.contributions[key] && payment.contributions[key].paid) {
                 totals[key] += payment.contributions[key].amount;
             }
         });
     });
+
+    grandTotal = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
     
     return { ...totals, grandTotal };
   }, [payments, contributionKeys]);
@@ -154,7 +155,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
         </TableBody>
         <TableFooter>
             <TableRow className="font-bold bg-muted/50">
-                <TableCell className="sticky left-0 bg-muted/50 z-10">Total</TableCell>
+                <TableCell className="sticky left-0 bg-muted/50 z-10">Total Terbayar</TableCell>
                 {contributionKeys.map(key => (
                     <TableCell key={`total-${key}`}>{formatCurrency(columnTotals[key])}</TableCell>
                 ))}
@@ -213,15 +214,17 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedP
     )
 }
 
-const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void, categories: Record<string, string> }) => {
+const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void }) => {
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
+
+  const expenseCategories = ['Sakit', 'Kemalangan', 'Talangan Kas', 'Lainnya'];
 
   useEffect(() => { setFormData(expense); }, [expense]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, [e.target.id]: e.target.value }));
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, [e.target.id]: Number(e.target.value) }));
-  const handleCategoryChange = (value: string) => setFormData(prev => ({ ...prev, category: value }));
+  const handleCategoryChange = (value: string) => setFormData(prev => ({ ...prev, category: value as Expense['category'] }));
 
   const handleSave = () => {
     if (!formData?.description || !formData?.date || !formData?.amount || !formData?.category) {
@@ -248,7 +251,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expen
             <Label htmlFor="category" className="text-right">Kategori</Label>
             <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
             <SelectContent>
-                {Object.entries(categories).map(([key, label]) => <SelectItem key={key} value={label}>{label}</SelectItem>)}
+                {expenseCategories.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
             </SelectContent>
             </Select>
           </div>
@@ -377,8 +380,8 @@ export default function KeuanganPage() {
   }, [db, selectedMonth, toast, user]);
 
 const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup) {
-        toast({ title: "Sinkronisasi Gagal", description: "Database atau grup belum dipilih.", variant: "destructive" });
+    if (!db || !selectedGroup || !contributionSettings) {
+        toast({ title: "Sinkronisasi Gagal", description: "Database, grup, atau pengaturan iuran belum siap.", variant: "destructive" });
         return;
     }
 
@@ -390,9 +393,6 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
 
             const group = allGroups.find(g => g.id === selectedGroup);
             if (!group) throw new Error("Grup tidak ditemukan");
-
-            const settingsForMonth = contributionSettings;
-            if (!settingsForMonth) throw new Error("Pengaturan iuran untuk bulan ini tidak ditemukan.");
             
             const [year, month] = selectedMonth.split('-').map(Number);
             
@@ -416,11 +416,11 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                 let newTotalAmount = 0;
 
                 if (group.id === mainArisanGroup?.id) {
-                    newContributions.main = { amount: settingsForMonth.main, paid: payment.contributions.main?.paid || false };
-                    newContributions.cash = { amount: settingsForMonth.cash, paid: payment.contributions.cash?.paid || false };
-                    newContributions.sick = { amount: settingsForMonth.sick, paid: payment.contributions.sick?.paid || false };
-                    newContributions.bereavement = { amount: settingsForMonth.bereavement, paid: payment.contributions.bereavement?.paid || false };
-                    settingsForMonth.others.forEach(other => {
+                    newContributions.main = { amount: contributionSettings.main, paid: payment.contributions.main?.paid || false };
+                    newContributions.cash = { amount: contributionSettings.cash, paid: payment.contributions.cash?.paid || false };
+                    newContributions.sick = { amount: contributionSettings.sick, paid: payment.contributions.sick?.paid || false };
+                    newContributions.bereavement = { amount: contributionSettings.bereavement, paid: payment.contributions.bereavement?.paid || false };
+                    contributionSettings.others.forEach(other => {
                         newContributions[other.id] = { amount: other.amount, paid: payment.contributions[other.id]?.paid || false };
                     });
                     newTotalAmount = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
@@ -429,8 +429,7 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                     newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
                 }
                 
-                const currentTotalAmount = Object.values(payment.contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-                if (newTotalAmount !== currentTotalAmount) {
+                if (newTotalAmount !== payment.totalAmount) {
                     needsUpdate = true;
                 }
 
@@ -456,11 +455,11 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                     const dueDate = endOfMonth(targetDate).toISOString();
             
                     if (group.id === mainArisanGroup?.id) {
-                        contributions.main = { amount: settingsForMonth.main, paid: false };
-                        contributions.cash = { amount: settingsForMonth.cash, paid: false };
-                        contributions.sick = { amount: settingsForMonth.sick, paid: false };
-                        contributions.bereavement = { amount: settingsForMonth.bereavement, paid: false };
-                        settingsForMonth.others.forEach(other => {
+                        contributions.main = { amount: contributionSettings.main, paid: false };
+                        contributions.cash = { amount: contributionSettings.cash, paid: false };
+                        contributions.sick = { amount: contributionSettings.sick, paid: false };
+                        contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
+                        contributionSettings.others.forEach(other => {
                             contributions[other.id] = { amount: other.amount, paid: false };
                         });
                         totalAmount = Object.values(contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
@@ -534,33 +533,28 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
     return labels;
   }, [contributionSettings]);
 
-  const expenseCategories = useMemo(() => {
-    const categories = { ...contributionLabels };
-    delete categories.cash; // Kas is not an expense category
-    return categories;
-  }, [contributionLabels]);
-
   // Payment handlers
-  const handleDetailedPaymentChange = (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
+  const handleDetailedPaymentChange = useCallback((paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
     setLocalChanges(prev =>
-      prev.map(p => {
-        if (p.id !== paymentId) return p;
+        prev.map(p => {
+            if (p.id !== paymentId) return p;
 
-        const updatedContributions = { 
-          ...p.contributions, 
-          [contributionType]: { ...p.contributions[contributionType], paid: isPaid } 
-        };
-        
-        const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
-        
-        return { 
-          ...p, 
-          contributions: updatedContributions,
-          status: allContributionsPaid ? 'Paid' : 'Unpaid',
-        };
-      })
+            const updatedContributions = {
+                ...p.contributions,
+                [contributionType]: { ...p.contributions[contributionType], paid: isPaid },
+            };
+            
+            // Recalculate status based on ALL contributions for this payment
+            const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
+            
+            return {
+                ...p,
+                contributions: updatedContributions,
+                status: allContributionsPaid ? 'Paid' : 'Unpaid',
+            };
+        })
     );
-  };
+  }, []);
 
   const handleSimpleStatusChange = (paymentId: string, newStatus: DetailedPayment['status']) => {
     setLocalChanges(prev => prev.map(p => {
@@ -694,7 +688,7 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                     <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                     <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <Button onClick={ensurePaymentsExistForMonth} disabled={isGenerating} className="w-full sm:w-auto">
+                                    <Button onClick={ensurePaymentsExistForMonth} disabled={isGenerating || !contributionSettings} className="w-full sm:w-auto">
                                         {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                                         Sinkronkan Iuran
                                     </Button>
@@ -739,13 +733,13 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                         <TableRow key={expense.id}>
                                         <TableCell>{format(new Date(expense.date), 'd MMMM yyyy', { locale: id })}</TableCell>
                                         <TableCell className="font-medium">{expense.description}</TableCell>
-                                        <TableCell><Badge variant={expense.category === 'Iuran Sakit' ? 'destructive' : expense.category === 'Iuran Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
+                                        <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
                                         <TableCell>{formatCurrency(expense.amount)}</TableCell>
                                         <TableCell className="text-right">
                                             
                                                 <>
                                                 <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><Edit className="h-4 w-4" /></Button>
-                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><Trash2 className="h-4 w-4" /></Button>
                                                 </>
                                             
                                         </TableCell>
@@ -774,10 +768,8 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                     {renderContent()}
                 </main>
             </div>
-            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} categories={expenseCategories} />}
+            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
         </SidebarInset>
     </SidebarProvider>
   );
 }
-
-    
