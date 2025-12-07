@@ -21,12 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore, useAuth } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { MoreHorizontal, PlusCircle, Loader2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Edit } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -316,7 +316,8 @@ export default function KeuanganPage() {
     if (!db || !selectedMonth || !user) return;
 
     const fetchSettings = async () => {
-        const docRef = doc(db, 'contributionSettings', selectedMonth);
+        const docId = selectedMonth.split('-').join('-');
+        const docRef = doc(db, 'contributionSettings', docId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -394,7 +395,7 @@ export default function KeuanganPage() {
               newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
           }
           
-          if (payment.totalAmount !== newTotalAmount) {
+          if (payment.totalAmount !== newTotalAmount || JSON.stringify(payment.contributions) !== JSON.stringify(newContributions)) {
               needsUpdate = true;
           }
 
@@ -473,14 +474,13 @@ export default function KeuanganPage() {
     return localChanges
       .filter(p => {
         const paymentDate = new Date(p.dueDate);
-        // Filter by group, month, and ensure the member is still in the group
         return p.groupId === selectedGroup &&
                getYear(paymentDate) === year &&
                getMonth(paymentDate) === month &&
                group.memberIds.includes(p.memberId);
       })
       .map(p => ({ ...p, member: allMembers.find(m => m.id === p.memberId) }))
-      .filter(p => p.member); // Ensure member exists and hasn't been deleted from the main members list
+      .filter(p => p.member);
   }, [localChanges, selectedGroup, selectedMonth, allMembers, allGroups]);
 
   const filteredExpenses = useMemo(() => {
@@ -498,8 +498,19 @@ export default function KeuanganPage() {
     return labels;
   }, [contributionSettings]);
 
+  const socialContributionMapping: Record<string, Expense['category']> = {
+    sick: 'Sakit',
+    bereavement: 'Kemalangan',
+  };
+
   // Payment handlers
-  const handleDetailedPaymentChange = (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
+  const handleDetailedPaymentChange = async (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
+    if (!db) return;
+    const payment = allPayments.find(p => p.id === paymentId);
+    const member = allMembers.find(m => m.id === payment?.memberId);
+    
+    if (!payment || !member) return;
+
     setLocalChanges(prev =>
       prev.map(p => {
         if (p.id !== paymentId) return p;
@@ -510,16 +521,64 @@ export default function KeuanganPage() {
         };
         
         const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
-        const newTotalAmount = Object.values(updatedContributions).reduce((sum, c: any) => sum + c.amount, 0);
-
+        
         return { 
           ...p, 
           contributions: updatedContributions,
-          totalAmount: newTotalAmount,
           status: allContributionsPaid ? 'Paid' : 'Unpaid' 
         };
       })
     );
+
+    // Auto-create/delete expense logic
+    const category = socialContributionMapping[contributionType as string];
+    const isSocialContribution = category || contributionSettings?.others.some(o => o.id === contributionType);
+
+    if (isSocialContribution) {
+        try {
+            await runTransaction(db, async (transaction) => {
+                const sourcePaymentCompositeId = `${paymentId}_${contributionType}`;
+                const expensesQuery = query(collection(db, "expenses"), where("sourcePaymentId", "==", sourcePaymentCompositeId));
+                const querySnapshot = await transaction.get(expensesQuery);
+
+                if (isPaid) {
+                    if (querySnapshot.empty) {
+                        let expenseCategory: Expense['category'] = 'Lainnya';
+                        let expenseDescription = `Iuran sosial dari ${member.name}`;
+
+                        if (category) {
+                            expenseCategory = category;
+                            expenseDescription = `Iuran ${category} dari ${member.name}`;
+                        } else {
+                            const otherInfo = contributionSettings?.others.find(o => o.id === contributionType);
+                            if (otherInfo) {
+                                expenseCategory = 'Iuran Anggota';
+                                expenseDescription = `Iuran "${otherInfo.description}" dari ${member.name}`;
+                            }
+                        }
+
+                        const newExpenseRef = doc(collection(db, 'expenses'));
+                        transaction.set(newExpenseRef, {
+                            date: payment.dueDate,
+                            description: expenseDescription,
+                            amount: payment.contributions[contributionType].amount,
+                            category: expenseCategory,
+                            sourcePaymentId: sourcePaymentCompositeId
+                        });
+                    }
+                } else {
+                    if (!querySnapshot.empty) {
+                        querySnapshot.forEach(doc => {
+                            transaction.delete(doc.ref);
+                        });
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Transaction failed: ", error);
+            toast({ title: 'Gagal Sinkronisasi Pengeluaran', description: 'Terjadi kesalahan saat membuat atau menghapus pengeluaran otomatis.', variant: 'destructive'});
+        }
+    }
   };
 
   const handleSimpleStatusChange = (paymentId: string, newStatus: DetailedPayment['status']) => {
@@ -698,8 +757,12 @@ export default function KeuanganPage() {
                                         <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
                                         <TableCell>{formatCurrency(expense.amount)}</TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><MoreHorizontal className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                            {!expense.sourcePaymentId && ( // Only allow edit/delete for manual expenses
+                                                <>
+                                                <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense)}><Edit className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteExpense(expense.id)}><MoreHorizontal className="h-4 w-4" /></Button>
+                                                </>
+                                            )}
                                         </TableCell>
                                         </TableRow>
                                     )) : <TableRow><TableCell colSpan={5} className="text-center h-24">Tidak ada data pengeluaran untuk bulan ini.</TableCell></TableRow>}

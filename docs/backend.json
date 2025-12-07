@@ -252,6 +252,10 @@
             "Talangan Kas",
             "Lainnya"
           ]
+        },
+        "sourcePaymentId": {
+            "type": "string",
+            "description": "Identifier to link an auto-generated expense to its source payment contribution."
         }
       },
       "required": [

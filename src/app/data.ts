@@ -53,6 +53,7 @@ export interface Expense {
     description: string;
     amount: number;
     category: 'Sakit' | 'Kemalangan' | 'Iuran Anggota' | 'Talangan Kas' | 'Lainnya';
+    sourcePaymentId?: string; // To link auto-generated expenses
 }
 
 export interface Announcement {
