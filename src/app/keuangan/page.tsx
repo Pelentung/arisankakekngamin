@@ -61,7 +61,7 @@ const generateMonthOptions = () => {
 // --- Detailed Table for Main Group ---
 const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, onAmountChange: (paymentId: string, contributionType: string, amount: number) => void, contributionLabels: Record<string, string>}) => {
   const contributionKeys = useMemo(() => {
-    return ['main', 'cash', 'sick', 'bereavement', 'others'];
+    return ['main', 'cash', 'sick', 'bereavement', 'other1', 'other2', 'other3'];
   }, []);
 
   const columnTotals = useMemo(() => {
@@ -89,7 +89,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contr
   
   return (
     <div className='overflow-x-auto'>
-      <Table className="min-w-[1000px]">
+      <Table className="min-w-[1200px]">
         <TableHeader>
           <TableRow>
             <TableHead className='sticky left-0 bg-card z-10 w-[200px]'>Nama</TableHead>
@@ -117,9 +117,9 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contr
               
               {contributionKeys.map(type => {
                 const contribution = payment.contributions[type as keyof DetailedPayment['contributions']];
-                 if (contribution !== undefined) { // Check for undefined instead of truthy
+                 if (contribution !== undefined) {
                     const label = contributionLabels[type] || type;
-                    const isEditable = type === 'sick' || type === 'bereavement' || type === 'others';
+                    const isEditable = type.startsWith('sick') || type.startsWith('bereavement') || type.startsWith('other');
                     
                     return (
                         <TableCell key={type}>
@@ -396,7 +396,7 @@ export default function KeuanganPage() {
     });
   }, [allExpenses, selectedMonth]);
 
-  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan', others: 'Iuran Lainnya' };
+  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan', other1: 'Lainnya 1', other2: 'Lainnya 2', other3: 'Lainnya 3' };
   
   // Payment handlers
   const handleDetailedPaymentChange = useCallback((paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -587,20 +587,22 @@ export default function KeuanganPage() {
           let hasChanges = false;
           if (isMainGroup) {
               if (!updatedContributions.main || updatedContributions.main.amount !== fixedMainAmount) {
-                  updatedContributions.main = { ...updatedContributions.main, amount: fixedMainAmount };
+                  updatedContributions.main = { ...updatedContributions.main, amount: fixedMainAmount, paid: updatedContributions.main?.paid || false };
                   hasChanges = true;
               }
               if (!updatedContributions.cash || updatedContributions.cash.amount !== fixedCashAmount) {
-                  updatedContributions.cash = { ...updatedContributions.cash, amount: fixedCashAmount };
+                  updatedContributions.cash = { ...updatedContributions.cash, amount: fixedCashAmount, paid: updatedContributions.cash?.paid || false };
                    hasChanges = true;
               }
-              // Ensure social funds exist
+              // Ensure social funds exist, preserving their existing values
               updatedContributions.sick = updatedContributions.sick || { amount: 0, paid: false };
               updatedContributions.bereavement = updatedContributions.bereavement || { amount: 0, paid: false };
-              updatedContributions.others = updatedContributions.others || { amount: 0, paid: false };
+              updatedContributions.other1 = updatedContributions.other1 || { amount: 0, paid: false };
+              updatedContributions.other2 = updatedContributions.other2 || { amount: 0, paid: false };
+              updatedContributions.other3 = updatedContributions.other3 || { amount: 0, paid: false };
           } else {
              if (!updatedContributions.main || updatedContributions.main.amount !== group.contributionAmount) {
-                updatedContributions.main = { ...updatedContributions.main, amount: group.contributionAmount };
+                updatedContributions.main = { ...updatedContributions.main, amount: group.contributionAmount, paid: updatedContributions.main?.paid || false };
                 hasChanges = true;
              }
           }
@@ -622,7 +624,9 @@ export default function KeuanganPage() {
               cash: { amount: fixedCashAmount, paid: false },
               sick: { amount: 0, paid: false },
               bereavement: { amount: 0, paid: false },
-              others: { amount: 0, paid: false },
+              other1: { amount: 0, paid: false },
+              other2: { amount: 0, paid: false },
+              other3: { amount: 0, paid: false },
             };
             totalAmount = fixedMainAmount + fixedCashAmount;
           } else {
@@ -631,7 +635,9 @@ export default function KeuanganPage() {
               cash: { amount: 0, paid: true }, // Not applicable for non-main groups
               sick: { amount: 0, paid: true },
               bereavement: { amount: 0, paid: true },
-              others: { amount: 0, paid: true },
+              other1: { amount: 0, paid: true },
+              other2: { amount: 0, paid: true },
+              other3: { amount: 0, paid: true },
             };
             totalAmount = group.contributionAmount;
           }
@@ -661,7 +667,7 @@ export default function KeuanganPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [db, selectedGroup, selectedMonth, allGroups, toast]);
+  }, [db, selectedGroup, selectedMonth, allGroups, toast, allMembers]);
 
   if (isLoadingAuth || !user) {
     return (
@@ -815,3 +821,5 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
+
+    
