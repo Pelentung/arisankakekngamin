@@ -354,11 +354,11 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
         if (!selectedGroup) {
             throw new Error("Silakan pilih grup terlebih dahulu.");
         }
-        if (!contributionSettings) {
-            throw new Error("Pengaturan iuran untuk bulan ini belum ada. Silakan atur di halaman 'Ketetapan Iuran'.");
-        }
 
         await runTransaction(db, async (transaction) => {
+            if (!selectedGroup) throw new Error("Grup belum dipilih.");
+            if (!contributionSettings) throw new Error("Pengaturan iuran untuk bulan ini belum ada. Silakan atur di halaman 'Ketetapan Iuran'.");
+
             const group = allGroups.find(g => g.id === selectedGroup);
             if (!group) throw new Error("Grup tidak ditemukan");
 
