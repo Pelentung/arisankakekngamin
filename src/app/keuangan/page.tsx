@@ -345,23 +345,20 @@ export default function KeuanganPage() {
     fetchSettings();
   }, [db, selectedMonth, toast, user]);
 
-  const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings) {
-      toast({
-          title: "Aksi Gagal",
-          description: "Pastikan grup dan pengaturan iuran untuk bulan ini sudah ada sebelum sinkronisasi.",
-          variant: "destructive"
-      });
-      return;
-    }
-  
+const ensurePaymentsExistForMonth = useCallback(async () => {
     setIsGenerating(true);
-  
     try {
+        if (!db) {
+            throw new Error("Koneksi database belum siap.");
+        }
+        if (!selectedGroup) {
+            throw new Error("Silakan pilih grup terlebih dahulu.");
+        }
+        if (!contributionSettings) {
+            throw new Error("Pengaturan iuran untuk bulan ini belum ada. Silakan atur di halaman 'Ketetapan Iuran'.");
+        }
+
         await runTransaction(db, async (transaction) => {
-            if (!db || !selectedGroup) { // Double check inside transaction
-              throw new Error("Koneksi database atau grup yang dipilih tidak tersedia.");
-            }
             const group = allGroups.find(g => g.id === selectedGroup);
             if (!group) throw new Error("Grup tidak ditemukan");
 
@@ -463,15 +460,17 @@ export default function KeuanganPage() {
                     description: "Tidak ada catatan iuran baru yang perlu dibuat atau diperbarui.",
                 });
             }
-      });
+        });
     } catch (error: any) {
-      console.error("Error ensuring payments exist:", error);
-      toast({ title: "Sinkronisasi Gagal", description: error.message || "Terjadi galat saat membuat/memperbarui catatan iuran.", variant: "destructive" });
-      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (transaction)', operation: 'write' }));
+        console.error("Error ensuring payments exist:", error);
+        toast({ title: "Sinkronisasi Gagal", description: error.message, variant: "destructive" });
+        if (!(error instanceof FirestorePermissionError)) {
+             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (transaction)', operation: 'write' }));
+        }
     } finally {
-      setIsGenerating(false);
+        setIsGenerating(false);
     }
-  }, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, contributionSettings, toast]);
+}, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, contributionSettings, toast]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -749,5 +748,3 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
-
-    
