@@ -14,6 +14,7 @@ import { RealTimeClock } from './real-time-clock';
 import Image from 'next/image';
 import { AllMembersList } from './all-members-list';
 import { CurrentWinnerCard } from './current-winner-card';
+import { FinancialSummary } from './financial-summary';
 
 
 export function UserDashboard() {
@@ -47,6 +48,8 @@ export function UserDashboard() {
                     </div>
                  </div>
                  
+                 <FinancialSummary />
+
                  <Card>
                     <CardHeader>
                         <CardTitle className="uppercase text-blue-600 bg-clip-text animate-shimmer animate-blink bg-[linear-gradient(110deg,transparent,45%,silver,55%,transparent)] bg-[length:200%_100%]">PENGUMUMAN</CardTitle>
