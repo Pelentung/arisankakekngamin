@@ -62,8 +62,18 @@ const generateMonthOptions = () => {
 const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
   const contributionKeys = useMemo(() => {
     if (!payments.length || !payments[0].contributions) return [];
-    // Get all possible contribution keys from the first payment as a representative sample
-    return Object.keys(payments[0].contributions);
+    
+    const preferredOrder = ['main', 'cash', 'sick', 'bereavement'];
+    const allKeys = Object.keys(payments[0].contributions);
+    
+    return allKeys.sort((a, b) => {
+        const indexA = preferredOrder.indexOf(a);
+        const indexB = preferredOrder.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b);
+    });
   }, [payments]);
 
   const columnTotals = useMemo(() => {
@@ -117,22 +127,25 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
               
               {contributionKeys.map(type => {
                 const contribution = payment.contributions[type as keyof DetailedPayment['contributions']];
-                 if (contribution && (contributionLabels[type] || type)) {
-                    return (
-                        <TableCell key={type}>
-                            <div className="flex items-center gap-2">
-                            <Checkbox
-                                id={`paid-${payment.id}-${type}`}
-                                checked={contribution.paid}
-                                onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
-                                aria-label={`Tandai ${contributionLabels[type]} untuk ${payment.member?.name} lunas`}
-                            />
-                            <label htmlFor={`paid-${payment.id}-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                {formatCurrency(contribution.amount)}
-                            </label>
-                            </div>
-                        </TableCell>
-                    )
+                 if (contribution) {
+                    const label = contributionLabels[type] || type;
+                     if (label) {
+                        return (
+                            <TableCell key={type}>
+                                <div className="flex items-center gap-2">
+                                <Checkbox
+                                    id={`paid-${payment.id}-${type}`}
+                                    checked={contribution.paid}
+                                    onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
+                                    aria-label={`Tandai ${label} untuk ${payment.member?.name} lunas`}
+                                />
+                                <label htmlFor={`paid-${payment.id}-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                    {formatCurrency(contribution.amount)}
+                                </label>
+                                </div>
+                            </TableCell>
+                        )
+                     }
                  }
                  return <TableCell key={type}></TableCell>; // Render empty cell if contribution doesn't exist for this payment
               })}
@@ -370,7 +383,7 @@ export default function KeuanganPage() {
     });
   }, [allExpenses, selectedMonth]);
 
-  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
+  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan', others: 'Iuran Lainnya' };
   
   // Payment handlers
   const handleDetailedPaymentChange = useCallback((paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -498,17 +511,25 @@ export default function KeuanganPage() {
                          cash: { amount: 0, paid: false },
                          sick: { amount: 0, paid: false },
                          bereavement: { amount: 0, paid: false },
+                         others: { amount: 0, paid: false },
                     };
                     let totalAmount = 0;
 
                     if (isMainGroup) {
                         contributions.main = { amount: 90000, paid: false };
                         contributions.cash = { amount: 50000, paid: false };
-                        contributions.sick = { amount: 0, paid: false };
-                        contributions.bereavement = { amount: 0, paid: false };
+                        // Sick, bereavement, and others are manual, so they are 0 by default
                         totalAmount = Object.values(contributions).reduce((sum, c) => sum + c.amount, 0);
                     } else {
                         contributions.main = { amount: group.contributionAmount, paid: false };
+                        // Other groups only have a main contribution
+                        contributions = {
+                            main: { amount: group.contributionAmount, paid: false },
+                            cash: { amount: 0, paid: false },
+                            sick: { amount: 0, paid: false },
+                            bereavement: { amount: 0, paid: false },
+                            others: { amount: 0, paid: false },
+                        };
                         totalAmount = group.contributionAmount;
                     }
 
@@ -687,5 +708,3 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
-
-    
