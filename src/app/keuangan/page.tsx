@@ -13,6 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -60,6 +61,26 @@ const generateMonthOptions = () => {
 // --- Detailed Table for Main Group ---
 const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
   const contributionKeys = Object.keys(contributionLabels);
+
+  const columnTotals = useMemo(() => {
+    const totals = contributionKeys.reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+    }, {} as Record<string, number>);
+
+    let grandTotal = 0;
+
+    payments.forEach(payment => {
+        grandTotal += payment.totalAmount;
+        contributionKeys.forEach(key => {
+            if (payment.contributions[key]) {
+                totals[key] += payment.contributions[key].amount;
+            }
+        });
+    });
+    
+    return { ...totals, grandTotal };
+  }, [payments, contributionKeys]);
   
   return (
     <div className='overflow-x-auto'>
@@ -131,6 +152,16 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
             </TableRow>
           ))}
         </TableBody>
+        <TableFooter>
+            <TableRow className="font-bold bg-muted/50">
+                <TableCell className="sticky left-0 bg-muted/50 z-10">Total</TableCell>
+                {contributionKeys.map(key => (
+                    <TableCell key={`total-${key}`}>{formatCurrency(columnTotals[key])}</TableCell>
+                ))}
+                <TableCell className="text-right">{formatCurrency(columnTotals.grandTotal)}</TableCell>
+                <TableCell></TableCell>
+            </TableRow>
+        </TableFooter>
       </Table>
     </div>
   );
@@ -182,7 +213,7 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedP
     )
 }
 
-const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void, categories: string[] }) => {
+const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void, categories: Record<string, string> }) => {
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
 
@@ -217,7 +248,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expen
             <Label htmlFor="category" className="text-right">Kategori</Label>
             <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
             <SelectContent>
-                {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                {Object.entries(categories).map(([key, label]) => <SelectItem key={key} value={label}>{label}</SelectItem>)}
             </SelectContent>
             </Select>
           </div>
@@ -346,15 +377,13 @@ export default function KeuanganPage() {
   }, [db, selectedMonth, toast, user]);
 
 const ensurePaymentsExistForMonth = useCallback(async () => {
+    if (!db || !selectedGroup) {
+        toast({ title: "Sinkronisasi Gagal", description: "Database atau grup belum dipilih.", variant: "destructive" });
+        return;
+    }
+
     setIsGenerating(true);
     try {
-        if (!db) {
-            throw new Error("Koneksi database belum siap.");
-        }
-        if (!selectedGroup) {
-            throw new Error("Silakan pilih grup terlebih dahulu.");
-        }
-
         await runTransaction(db, async (transaction) => {
             if (!selectedGroup) throw new Error("Grup belum dipilih.");
             if (!contributionSettings) throw new Error("Pengaturan iuran untuk bulan ini belum ada. Silakan atur di halaman 'Ketetapan Iuran'.");
@@ -470,7 +499,7 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
     } finally {
         setIsGenerating(false);
     }
-}, [db, selectedGroup, selectedMonth, allGroups, allMembers, mainArisanGroup, contributionSettings, toast]);
+}, [db, selectedGroup, selectedMonth, allGroups, mainArisanGroup, contributionSettings, toast]);
   
   // Filtered data for display
   const filteredPayments = useMemo(() => {
@@ -506,8 +535,10 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
   }, [contributionSettings]);
 
   const expenseCategories = useMemo(() => {
-    return ["Talangan Kas", "Sakit", "Kemalangan", "Lainnya"];
-  }, []);
+    const categories = { ...contributionLabels };
+    delete categories.cash; // Kas is not an expense category
+    return categories;
+  }, [contributionLabels]);
 
   // Payment handlers
   const handleDetailedPaymentChange = (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -748,3 +779,5 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
     </SidebarProvider>
   );
 }
+
+    
