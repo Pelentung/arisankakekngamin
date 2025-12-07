@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -22,12 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore, useAuth } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { MoreHorizontal, PlusCircle, Loader2, Edit, Trash2, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Edit, Trash2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -214,9 +213,11 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedP
     )
 }
 
-const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void, categories: string[] }) => {
+const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void }) => {
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
+
+  const expenseCategories = ['Sakit', 'Kemalangan', 'Talangan Kas', 'Lainnya'];
 
   useEffect(() => { setFormData(expense); }, [expense]);
 
@@ -249,7 +250,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expen
             <Label htmlFor="category" className="text-right">Kategori</Label>
             <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
             <SelectContent>
-                {categories.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                {expenseCategories.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
             </SelectContent>
             </Select>
           </div>
@@ -289,7 +290,6 @@ export default function KeuanganPage() {
   
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     if (!auth) return;
@@ -399,108 +399,6 @@ export default function KeuanganPage() {
     }
     fetchSettings();
   }, [db, selectedMonth, user, toast]);
-
-const ensurePaymentsExistForMonth = useCallback(async () => {
-    setIsGenerating(true);
-    
-    try {
-        if (!db || !selectedGroup || !contributionSettings || allGroups.length === 0) {
-            throw new Error("Data prasyarat (db, grup, atau pengaturan) belum siap untuk sinkronisasi.");
-        }
-
-        await runTransaction(db, async (transaction) => {
-            const group = allGroups.find(g => g.id === selectedGroup);
-            if (!group) throw new Error("Grup tidak ditemukan");
-            
-            const [year, month] = selectedMonth.split('-').map(Number);
-            
-            const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
-            const querySnapshot = await transaction.get(paymentsQuery);
-
-            const paymentsForGroup = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetailedPayment));
-            const paymentsForMonth = paymentsForGroup.filter(p => {
-                const paymentDate = new Date(p.dueDate);
-                return getYear(paymentDate) === year && getMonth(paymentDate) === month;
-            });
-
-            const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
-            
-            // Check existing payments for correctness
-            paymentsForMonth.forEach(payment => {
-                let needsUpdate = false;
-                let newContributions: any = {};
-                let newTotalAmount = 0;
-
-                if (group.id === mainArisanGroup?.id) {
-                    newContributions.main = { amount: contributionSettings.main, paid: payment.contributions.main?.paid || false };
-                    newContributions.cash = { amount: contributionSettings.cash, paid: payment.contributions.cash?.paid || false };
-                    newContributions.sick = { amount: contributionSettings.sick, paid: payment.contributions.sick?.paid || false };
-                    newContributions.bereavement = { amount: contributionSettings.bereavement, paid: payment.contributions.bereavement?.paid || false };
-                    contributionSettings.others.forEach(other => {
-                        newContributions[other.id] = { amount: other.amount, paid: payment.contributions[other.id]?.paid || false };
-                    });
-                    newTotalAmount = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-                } else {
-                    newTotalAmount = group.contributionAmount;
-                    newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
-                }
-                
-                if (newTotalAmount !== payment.totalAmount) {
-                    needsUpdate = true;
-                }
-
-                if (needsUpdate) {
-                    const paymentRef = doc(db, 'payments', payment.id);
-                    const recalculatedTotal = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-                    const updatedStatus = Object.values(newContributions).every((c: any) => c.paid) ? 'Paid' : 'Unpaid';
-                    transaction.update(paymentRef, { 
-                        contributions: newContributions, 
-                        totalAmount: recalculatedTotal,
-                        status: updatedStatus
-                    });
-                }
-            });
-            
-            // Create new payments for members not in the list
-            group.memberIds.forEach(memberId => {
-                if (!existingMemberIds.has(memberId)) {
-                    let contributions: any = {};
-                    let totalAmount = 0;
-                    const targetDate = new Date(year, month);
-                    const dueDate = endOfMonth(targetDate).toISOString();
-            
-                    if (group.id === mainArisanGroup?.id) {
-                        contributions.main = { amount: contributionSettings.main, paid: false };
-                        contributions.cash = { amount: contributionSettings.cash, paid: false };
-                        contributions.sick = { amount: contributionSettings.sick, paid: false };
-                        contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
-                        contributionSettings.others.forEach(other => {
-                            contributions[other.id] = { amount: other.amount, paid: false };
-                        });
-                        totalAmount = Object.values(contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-                    } else {
-                        totalAmount = group.contributionAmount;
-                        contributions.main = { amount: totalAmount, paid: false };
-                    }
-            
-                    const newPaymentDoc = doc(collection(db, 'payments'));
-                    transaction.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
-                }
-            });
-        });
-
-        toast({ title: "Sinkronisasi Iuran Selesai", description: "Data iuran telah diperbarui dan disinkronkan." });
-
-    } catch (error: any) {
-        console.error("Error ensuring payments exist:", error);
-        toast({ title: "Sinkronisasi Gagal", description: error.message, variant: "destructive" });
-        if (!(error instanceof FirestorePermissionError)) {
-             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'payments (transaction)', operation: 'write' }));
-        }
-    } finally {
-        setIsGenerating(false);
-    }
-}, [db, selectedGroup, selectedMonth, allGroups, mainArisanGroup, contributionSettings, toast]);
 
   
   // Filtered data for display
@@ -625,25 +523,6 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
     }
   };
 
-  const expenseCategories = useMemo(() => {
-    if (!contributionSettings) return ['Talangan Kas', 'Lainnya'];
-    const dynamicCats = Object.values(contributionLabels).filter(label => label !== 'Iuran Kas');
-    return ['Talangan Kas', ...dynamicCats, 'Lainnya'];
-  }, [contributionSettings, contributionLabels]);
-
-
-  const handleSync = () => {
-      if (!db || !selectedGroup || !contributionSettings) {
-          toast({
-              title: "Sinkronisasi Gagal",
-              description: "Data penting (grup atau pengaturan) belum termuat. Coba lagi sesaat.",
-              variant: "destructive",
-          });
-          return;
-      }
-      ensurePaymentsExistForMonth();
-  };
-
 
   if (isLoadingAuth || !user) {
     return (
@@ -711,20 +590,11 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                     <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Pilih Grup" /></SelectTrigger>
                                     <SelectContent>{allGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <Button onClick={handleSync} disabled={isGenerating}>
-                                        {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                        Sinkronkan Iuran
-                                    </Button>
                                     <Button onClick={savePaymentChanges} className="w-full sm:w-auto">Simpan Perubahan</Button>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                {isGenerating ? (
-                                        <div className="flex items-center justify-center h-60">
-                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                        <p className="ml-3 text-muted-foreground">Menyinkronkan data iuran...</p>
-                                    </div>
-                                ) : filteredPayments.length > 0 ? (
+                                {filteredPayments.length > 0 ? (
                                     selectedGroup === mainArisanGroup.id ? (
                                         <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                                     ) : (
@@ -732,8 +602,8 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                                     )
                                 ) : (
                                     <div className="text-center text-muted-foreground py-8 h-60 flex flex-col justify-center items-center">
-                                        <p>Tidak ada data iuran untuk ditampilkan.</p>
-                                        <p className="text-xs mt-2">Pilih grup dan klik "Sinkronkan Iuran" untuk membuat atau memperbarui catatan pembayaran bulan ini.</p>
+                                        <p>Tidak ada data iuran untuk bulan dan grup ini.</p>
+                                        <p className="text-xs mt-2">Pastikan anggota telah ditambahkan ke grup ini dan data iuran telah dibuat.</p>
                                     </div>
                                 )}
                             </CardContent>
@@ -791,10 +661,8 @@ const ensurePaymentsExistForMonth = useCallback(async () => {
                     {renderContent()}
                 </main>
             </div>
-            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} categories={expenseCategories} />}
+            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
         </SidebarInset>
     </SidebarProvider>
   );
 }
-
-    
