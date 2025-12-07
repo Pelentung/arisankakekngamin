@@ -52,7 +52,7 @@ export interface Expense {
     date: string;
     description: string;
     amount: number;
-    category: string;
+    category: 'Sakit' | 'Kemalangan' | 'Talangan Kas' | 'Lainnya';
 }
 
 export interface Announcement {
@@ -70,6 +70,7 @@ export interface OtherContribution {
     amount: number;
 }
 
+// This interface is no longer used but kept for reference if needed in future
 export interface ContributionSettings {
     main: number;
     cash: number;
@@ -130,3 +131,5 @@ export const unsubscribeAll = () => {
     activeListeners.forEach(unsubscribe => unsubscribe());
     activeListeners = [];
 };
+
+    

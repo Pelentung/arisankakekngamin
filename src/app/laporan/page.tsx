@@ -37,8 +37,6 @@ export default function LaporanPage() {
     const unsubExpenses = subscribeToData(db, 'expenses', () => {});
     const unsubGroups = subscribeToData(db, 'groups', () => {});
     const unsubMembers = subscribeToData(db, 'members', () => {});
-    const unsubSettings = subscribeToData(db, 'contributionSettings', () => {});
-
 
     return () => {
       authUnsubscribe();
@@ -134,3 +132,5 @@ export default function LaporanPage() {
   // This redirect will also be safely handled by the useEffect above.
   return null;
 }
+
+    

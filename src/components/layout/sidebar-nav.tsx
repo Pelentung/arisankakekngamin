@@ -86,19 +86,6 @@ export function SidebarNav() {
         <Separator className="my-2" />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === '/admin'}
-              tooltip={'Ketetapan Iuran'}
-              onClick={() => setOpenMobile(false)}
-            >
-              <Link href="/admin">
-                <Shield />
-                <span>Ketetapan Iuran</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton onClick={handleSignOut} tooltip="Keluar">
               <LogOut />
               <span>Keluar</span>
@@ -109,3 +96,5 @@ export function SidebarNav() {
     </>
   );
 }
+
+    

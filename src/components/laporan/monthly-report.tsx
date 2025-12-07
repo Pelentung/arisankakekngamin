@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Group, Member, DetailedPayment, Expense, ContributionSettings } from '@/app/data';
+import type { Group, Member, DetailedPayment, Expense } from '@/app/data';
 import { subscribeToData } from '@/app/data';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,7 +37,6 @@ export function MonthlyReport() {
     const [allPayments, setAllPayments] = useState<DetailedPayment[]>([]);
     const [allGroups, setAllGroups] = useState<Group[]>([]);
     const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
-    const [contributionSettings, setContributionSettings] = useState<ContributionSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     const monthOptions = useMemo(() => generateMonthOptions(), []);
@@ -49,22 +48,17 @@ export function MonthlyReport() {
         const unsubPayments = subscribeToData(db, 'payments', data => setAllPayments(data as DetailedPayment[]));
         const unsubGroups = subscribeToData(db, 'groups', data => setAllGroups(data as Group[]));
         const unsubExpenses = subscribeToData(db, 'expenses', data => setAllExpenses(data as Expense[]));
-        const unsubSettings = subscribeToData(db, 'contributionSettings', data => {
-            if (data.length > 0) setContributionSettings(data[0] as ContributionSettings);
-        });
 
         Promise.all([
             new Promise(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(true); unsub(); }); }),
             new Promise(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(true); unsub(); }); }),
             new Promise(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(true); unsub(); }); }),
-            new Promise(resolve => { const unsub = subscribeToData(db, 'contributionSettings', () => { resolve(true); unsub(); }); }),
         ]).finally(() => setIsLoading(false));
 
         return () => {
             unsubPayments();
             unsubGroups();
             unsubExpenses();
-            unsubSettings();
         };
     }, [db]);
 
@@ -105,7 +99,7 @@ export function MonthlyReport() {
     }, [selectedMonth, allPayments, allExpenses]);
 
 
-    if (isLoading || !contributionSettings) {
+    if (isLoading) {
         return (
              <Card>
                 <CardHeader>
@@ -212,3 +206,5 @@ export function MonthlyReport() {
     </div>
   );
 }
+
+    

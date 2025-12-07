@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import type { DetailedPayment, Member, Group, ContributionSettings, Expense } from '@/app/data';
+import type { DetailedPayment, Member, Group, Expense } from '@/app/data';
 import { subscribeToData } from '@/app/data';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore, useAuth } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
@@ -222,7 +222,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
 
-  const expenseCategories = ['Sakit', 'Kemalangan', 'Talangan Kas', 'Lainnya'];
+  const expenseCategories: Expense['category'][] = ['Sakit', 'Kemalangan', 'Talangan Kas', 'Lainnya'];
 
   useEffect(() => { setFormData(expense); }, [expense]);
 
@@ -280,7 +280,6 @@ export default function KeuanganPage() {
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
-  const [contributionSettings, setContributionSettings] = useState<ContributionSettings | null>(null);
   const [mainArisanGroup, setMainArisanGroup] = useState<Group | null>(null);
 
   // Page state
@@ -310,10 +309,11 @@ export default function KeuanganPage() {
     return () => unsubscribe();
   }, [auth, router]);
 
-  // Data fetching for collections (runs once on mount)
+  // Data fetching for collections
   useEffect(() => {
     if (!db || !user) return;
     
+    setIsLoading(true);
     const unsubPayments = subscribeToData(db, 'payments', (data) => { 
         setAllPayments(data as DetailedPayment[]); 
         setLocalChanges(data as DetailedPayment[]);
@@ -331,33 +331,19 @@ export default function KeuanganPage() {
         }
       }
     });
+    
+    Promise.all([
+        new Promise(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'members', () => { resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(true); unsub(); }); }),
+        new Promise(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(true); unsub(); }); }),
+    ]).finally(() => setIsLoading(false));
 
     return () => { 
         unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses(); 
     };
   }, [db, user]); 
-  
-  // Fetch contribution settings separately whenever the selectedMonth changes
-  useEffect(() => {
-    if (!db || !user) return;
-    
-    setIsLoading(true);
-    const fetchSettings = async () => {
-        const docId = selectedMonth;
-        const docRef = doc(db, 'contributionSettings', docId);
-        const docSnap = await getDoc(docRef);
 
-        if (docSnap.exists()) {
-            setContributionSettings(docSnap.data() as ContributionSettings);
-        } else {
-            setContributionSettings(null); // Explicitly set to null if not found
-        }
-        setIsLoading(false);
-    }
-    fetchSettings();
-  }, [db, selectedMonth, user]);
-
-  
   // Filtered data for display
   const filteredPayments = useMemo(() => {
     const group = allGroups.find(g => g.id === selectedGroup);
@@ -384,13 +370,8 @@ export default function KeuanganPage() {
     });
   }, [allExpenses, selectedMonth]);
 
-  const contributionLabels = useMemo(() => {
-    if (!contributionSettings) return { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
-    const labels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
-    contributionSettings.others.forEach(other => { labels[other.id] = other.description; });
-    return labels;
-  }, [contributionSettings]);
-
+  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
+  
   // Payment handlers
   const handleDetailedPaymentChange = useCallback((paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
     setLocalChanges(prev =>
@@ -480,12 +461,8 @@ export default function KeuanganPage() {
   };
 
   const handleSync = useCallback(async () => {
-      if (!db || !selectedGroup || !contributionSettings) {
-        let errorMsg = "Database, grup, atau pengaturan belum siap.";
-        if (!contributionSettings) {
-            errorMsg = `Pengaturan Iuran untuk bulan terpilih belum dibuat. Harap atur terlebih dahulu di halaman Ketetapan Iuran.`;
-        }
-         toast({ title: "Sinkronisasi Gagal", description: errorMsg, variant: "destructive" });
+      if (!db || !selectedGroup) {
+         toast({ title: "Sinkronisasi Gagal", description: "Database atau grup belum siap.", variant: "destructive" });
         return;
       }
 
@@ -524,14 +501,11 @@ export default function KeuanganPage() {
                     };
                     let totalAmount = 0;
 
-                    if (isMainGroup && contributionSettings) {
-                        contributions.main = { amount: contributionSettings.main, paid: false };
-                        contributions.cash = { amount: contributionSettings.cash, paid: false };
-                        contributions.sick = { amount: contributionSettings.sick, paid: false };
-                        contributions.bereavement = { amount: contributionSettings.bereavement, paid: false };
-                        contributionSettings.others.forEach(other => {
-                            contributions[other.id] = { amount: other.amount, paid: false };
-                        });
+                    if (isMainGroup) {
+                        contributions.main = { amount: 90000, paid: false };
+                        contributions.cash = { amount: 50000, paid: false };
+                        contributions.sick = { amount: 0, paid: false };
+                        contributions.bereavement = { amount: 0, paid: false };
                         totalAmount = Object.values(contributions).reduce((sum, c) => sum + c.amount, 0);
                     } else {
                         contributions.main = { amount: group.contributionAmount, paid: false };
@@ -559,7 +533,7 @@ export default function KeuanganPage() {
       } finally {
         setIsGenerating(false);
       }
-  }, [db, selectedGroup, selectedMonth, allGroups, contributionSettings, toast]);
+  }, [db, selectedGroup, selectedMonth, allGroups, toast]);
 
   if (isLoadingAuth || !user) {
     return (
@@ -593,8 +567,6 @@ export default function KeuanganPage() {
         );
     }
     
-    const isMainGroupAndSettingsMissing = selectedGroup === mainArisanGroup.id && !contributionSettings;
-
     return (
         <Card>
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -637,20 +609,13 @@ export default function KeuanganPage() {
                                       <Button
                                           variant="outline"
                                           onClick={handleSync}
-                                          disabled={isGenerating || isMainGroupAndSettingsMissing}
+                                          disabled={isGenerating}
                                         >
                                           {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
                                           Buat/Perbarui Iuran Bulan Ini
                                         </Button>
                                     </div>
-                                {isMainGroupAndSettingsMissing ? (
-                                    <div className="text-center text-destructive-foreground bg-destructive/80 rounded-lg p-6 my-8 flex flex-col justify-center items-center gap-4">
-                                        <AlertCircle className="h-8 w-8" />
-                                        <h3 className="font-bold">Pengaturan Iuran Tidak Ditemukan</h3>
-                                        <p>Pengaturan iuran untuk bulan <span className="font-semibold">{monthOptions.find(m => m.value === selectedMonth)?.label}</span> belum dibuat.</p>
-                                        <p className="text-sm opacity-90">Silakan buat terlebih dahulu di halaman 'Ketetapan Iuran' agar dapat membuat data iuran untuk bulan ini.</p>
-                                    </div>
-                                ) : filteredPayments.length > 0 ? (
+                                {filteredPayments.length > 0 ? (
                                     selectedGroup === mainArisanGroup.id ? (
                                         <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                                     ) : (
@@ -722,3 +687,5 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
+
+    
