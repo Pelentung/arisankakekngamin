@@ -27,7 +27,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { MoreHorizontal, PlusCircle, Loader2, Edit, Trash2, GitPullRequest } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Edit, Trash2, GitPullRequest, AlertCircle } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -314,7 +314,6 @@ export default function KeuanganPage() {
   useEffect(() => {
     if (!db || !user) return;
     
-    setIsLoading(true);
     const unsubPayments = subscribeToData(db, 'payments', (data) => { 
         setAllPayments(data as DetailedPayment[]); 
         setLocalChanges(data as DetailedPayment[]);
@@ -352,16 +351,11 @@ export default function KeuanganPage() {
             setContributionSettings(docSnap.data() as ContributionSettings);
         } else {
             setContributionSettings(null); // Explicitly set to null if not found
-             toast({ 
-                title: "Peringatan", 
-                description: `Pengaturan iuran untuk bulan ini tidak ditemukan. Silakan buat di halaman Ketetapan Iuran.`, 
-                variant: "destructive" 
-             });
         }
         setIsLoading(false);
     }
     fetchSettings();
-  }, [db, selectedMonth, user, toast]);
+  }, [db, selectedMonth, user]);
 
   
   // Filtered data for display
@@ -487,16 +481,18 @@ export default function KeuanganPage() {
   };
 
   const ensurePaymentsExistForMonth = useCallback(async () => {
-      try {
-        if (!db || !selectedGroup || !contributionSettings) {
-            let errorMsg = "Database, grup, atau pengaturan belum siap.";
-            if (!contributionSettings) {
-                errorMsg = `Pengaturan Iuran untuk bulan terpilih belum dibuat. Harap atur terlebih dahulu di halaman Ketetapan Iuran.`;
-            }
-            throw new Error(errorMsg);
+      if (!db || !selectedGroup || !contributionSettings) {
+        let errorMsg = "Database, grup, atau pengaturan belum siap.";
+        if (!contributionSettings) {
+            errorMsg = `Pengaturan Iuran untuk bulan terpilih belum dibuat. Harap atur terlebih dahulu di halaman Ketetapan Iuran.`;
         }
-        setIsGenerating(true);
+         toast({ title: "Sinkronisasi Gagal", description: errorMsg, variant: "destructive" });
+        return;
+      }
 
+      setIsGenerating(true);
+
+      try {
         await runTransaction(db, async (transaction) => {
             const group = allGroups.find(g => g.id === selectedGroup);
             if (!group) return;
@@ -530,7 +526,7 @@ export default function KeuanganPage() {
                     };
                     let totalAmount = 0;
 
-                    if (isMainGroup) {
+                    if (isMainGroup && contributionSettings) {
                         contributions.main = { amount: contributionSettings.main, paid: false };
                         contributions.cash = { amount: contributionSettings.cash, paid: false };
                         contributions.sick = { amount: contributionSettings.sick, paid: false };
@@ -641,13 +637,21 @@ export default function KeuanganPage() {
                                       <Button
                                           variant="outline"
                                           onClick={ensurePaymentsExistForMonth}
-                                          disabled={isGenerating || !contributionSettings}
+                                          disabled={isGenerating}
                                         >
                                           {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
                                           Buat/Perbarui Iuran Bulan Ini
                                         </Button>
                                     </div>
-                                {filteredPayments.length > 0 ? (
+                                {
+                                !contributionSettings && selectedGroup === mainArisanGroup.id ? (
+                                    <div className="text-center text-destructive-foreground bg-destructive/80 rounded-lg p-6 my-8 flex flex-col justify-center items-center gap-4">
+                                        <AlertCircle className="h-8 w-8" />
+                                        <h3 className="font-bold">Pengaturan Iuran Tidak Ditemukan</h3>
+                                        <p>Pengaturan iuran untuk bulan <span className="font-semibold">{monthOptions.find(m => m.value === selectedMonth)?.label}</span> belum dibuat.</p>
+                                        <p className="text-sm opacity-90">Silakan buat terlebih dahulu di halaman 'Ketetapan Iuran' agar dapat membuat data iuran untuk bulan ini.</p>
+                                    </div>
+                                ) : filteredPayments.length > 0 ? (
                                     selectedGroup === mainArisanGroup.id ? (
                                         <DetailedPaymentTable payments={filteredPayments} onPaymentChange={handleDetailedPaymentChange} contributionLabels={contributionLabels} />
                                     ) : (
