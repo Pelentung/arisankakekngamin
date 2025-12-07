@@ -198,7 +198,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
         return;
     }
     const newExpenseData: Omit<Expense, 'id'> = {
-      description: formData.description, date: formData.date, amount: formData.amount, category: formData.category,
+      description: formData.description, date: formData.date, amount: formData.amount, category: formData.category, sourcePaymentId: formData.sourcePaymentId
     };
     onSave(newExpenseData, formData.id);
   };
@@ -499,6 +499,7 @@ export default function KeuanganPage() {
   }, [contributionSettings]);
 
   const socialContributionMapping: Record<string, Expense['category']> = {
+    main: 'Iuran Anggota',
     sick: 'Sakit',
     bereavement: 'Kemalangan',
   };
@@ -532,9 +533,9 @@ export default function KeuanganPage() {
 
     // Auto-create/delete expense logic
     const category = socialContributionMapping[contributionType as string];
-    const isSocialContribution = category || contributionSettings?.others.some(o => o.id === contributionType);
+    const isAutoExpenseType = category || contributionSettings?.others.some(o => o.id === contributionType);
 
-    if (isSocialContribution) {
+    if (isAutoExpenseType) {
         try {
             await runTransaction(db, async (transaction) => {
                 const sourcePaymentCompositeId = `${paymentId}_${contributionType}`;
@@ -544,7 +545,7 @@ export default function KeuanganPage() {
                 if (isPaid) {
                     if (querySnapshot.empty) {
                         let expenseCategory: Expense['category'] = 'Lainnya';
-                        let expenseDescription = `Iuran sosial dari ${member.name}`;
+                        let expenseDescription = `Iuran dari ${member.name}`;
 
                         if (category) {
                             expenseCategory = category;
@@ -795,3 +796,4 @@ export default function KeuanganPage() {
   );
 }
 
+    
