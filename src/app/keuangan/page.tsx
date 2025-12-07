@@ -61,7 +61,7 @@ const generateMonthOptions = () => {
 // --- Detailed Table for Main Group ---
 const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, contributionLabels: Record<string, string>}) => {
   const contributionKeys = useMemo(() => {
-    if (!payments.length) return [];
+    if (!payments.length || !payments[0].contributions) return [];
     // Get all possible contribution keys from the first payment as a representative sample
     return Object.keys(payments[0].contributions);
   }, [payments]);
@@ -161,7 +161,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, contributionLabels }:
             <TableRow className="font-bold bg-muted/50">
                 <TableCell className="sticky left-0 bg-muted/50 z-10">Total Terbayar</TableCell>
                 {contributionKeys.map(key => (
-                    <TableCell key={`total-${key}`}>{formatCurrency(columnTotals[key])}</TableCell>
+                    <TableCell key={`total-${key}`}>{formatCurrency(columnTotals[key] || 0)}</TableCell>
                 ))}
                 <TableCell className="text-right">{formatCurrency(columnTotals.grandTotal)}</TableCell>
                 <TableCell></TableCell>
@@ -310,7 +310,7 @@ export default function KeuanganPage() {
     return () => unsubscribe();
   }, [auth, router]);
 
-  // Data fetching for collections
+  // Data fetching for collections (runs once on mount)
   useEffect(() => {
     if (!db || !user) return;
     
@@ -335,9 +335,9 @@ export default function KeuanganPage() {
     return () => { 
         unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses(); 
     };
-  }, [db, user, selectedGroup]); 
+  }, [db, user]); 
   
-  // Fetch contribution settings separately when month changes
+  // Fetch contribution settings separately whenever the selectedMonth changes
   useEffect(() => {
     if (!db || !user) return;
     
@@ -385,7 +385,7 @@ export default function KeuanganPage() {
   }, [allExpenses, selectedMonth]);
 
   const contributionLabels = useMemo(() => {
-    if (!contributionSettings) return {};
+    if (!contributionSettings) return { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
     const labels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan' };
     contributionSettings.others.forEach(other => { labels[other.id] = other.description; });
     return labels;
@@ -402,7 +402,6 @@ export default function KeuanganPage() {
                 [contributionType]: { ...p.contributions[contributionType], paid: isPaid },
             };
             
-            // Recalculate status based on ALL contributions for this payment
             const allContributionsPaid = Object.values(updatedContributions).every(c => c.paid);
             
             return {
@@ -480,7 +479,7 @@ export default function KeuanganPage() {
     }
   };
 
-  const ensurePaymentsExistForMonth = useCallback(async () => {
+  const handleSync = useCallback(async () => {
       if (!db || !selectedGroup || !contributionSettings) {
         let errorMsg = "Database, grup, atau pengaturan belum siap.";
         if (!contributionSettings) {
@@ -500,7 +499,6 @@ export default function KeuanganPage() {
             const [year, month] = selectedMonth.split('-').map(Number);
             const dueDate = format(new Date(year, month, 1), 'yyyy-MM-dd');
 
-            // Query existing payments for the specific group and month within the transaction
             const paymentsQuery = query(
                 collection(db, 'payments'), 
                 where('groupId', '==', selectedGroup),
@@ -594,6 +592,8 @@ export default function KeuanganPage() {
             </Card>
         );
     }
+    
+    const isMainGroupAndSettingsMissing = selectedGroup === mainArisanGroup.id && !contributionSettings;
 
     return (
         <Card>
@@ -636,15 +636,14 @@ export default function KeuanganPage() {
                                 <div className="mb-4 flex justify-end">
                                       <Button
                                           variant="outline"
-                                          onClick={ensurePaymentsExistForMonth}
-                                          disabled={isGenerating}
+                                          onClick={handleSync}
+                                          disabled={isGenerating || isMainGroupAndSettingsMissing}
                                         >
                                           {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
                                           Buat/Perbarui Iuran Bulan Ini
                                         </Button>
                                     </div>
-                                {
-                                !contributionSettings && selectedGroup === mainArisanGroup.id ? (
+                                {isMainGroupAndSettingsMissing ? (
                                     <div className="text-center text-destructive-foreground bg-destructive/80 rounded-lg p-6 my-8 flex flex-col justify-center items-center gap-4">
                                         <AlertCircle className="h-8 w-8" />
                                         <h3 className="font-bold">Pengaturan Iuran Tidak Ditemukan</h3>
