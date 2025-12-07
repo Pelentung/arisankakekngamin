@@ -7,7 +7,7 @@ import { subscribeToData } from '@/app/data';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowDownCircle, ArrowUpCircle, Banknote, HeartHandshake } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Banknote, HeartHandshake, BookOpenCheck, Landmark } from 'lucide-react';
 import { format, getMonth, getYear, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useFirestore } from '@/firebase';
@@ -65,18 +65,40 @@ export function MonthlyReport() {
 
     const reportData = useMemo(() => {
         const [year, month] = selectedMonth.split('-').map(Number);
-        
+        const selectedDate = new Date(year, month);
+        const prevMonthDate = subMonths(selectedDate, 1);
+        const prevMonthYear = getYear(prevMonthDate);
+        const prevMonth = getMonth(prevMonthDate);
+
+        // --- Previous Month Calculations ---
+        const paymentsForPrevMonth = allPayments.filter(p => {
+            const paymentDueDate = new Date(p.dueDate);
+            return getYear(paymentDueDate) === prevMonthYear && getMonth(paymentDueDate) === prevMonth;
+        });
+        const expensesForPrevMonth = allExpenses.filter(e => {
+            const expenseDate = new Date(e.date);
+            return getYear(expenseDate) === prevMonthYear && getMonth(expenseDate) === prevMonth;
+        });
+
+        const prevMonthCashIn = paymentsForPrevMonth.reduce((sum, payment) => {
+            const paidContributionsTotal = Object.values(payment.contributions)
+                .filter(c => c.paid)
+                .reduce((contributionSum, c) => contributionSum + c.amount, 0);
+            return sum + paidContributionsTotal;
+        }, 0);
+        const prevMonthCashOut = expensesForPrevMonth.reduce((sum, e) => sum + e.amount, 0);
+        const openingBalance = prevMonthCashIn - prevMonthCashOut;
+
+        // --- Current Month Calculations ---
         const paymentsForMonth = allPayments.filter(p => {
             const paymentDueDate = new Date(p.dueDate);
             return getYear(paymentDueDate) === year && getMonth(paymentDueDate) === month;
         });
-
         const expensesForMonth = allExpenses.filter(e => {
             const expenseDate = new Date(e.date);
             return getYear(expenseDate) === year && getMonth(expenseDate) === month;
         });
 
-        // Calculate cashIn by summing up individual paid contributions
         const cashIn = paymentsForMonth.reduce((sum, payment) => {
             const paidContributionsTotal = Object.values(payment.contributions)
                 .filter(c => c.paid)
@@ -85,8 +107,7 @@ export function MonthlyReport() {
         }, 0);
 
         const cashOut = expensesForMonth.reduce((sum, e) => sum + e.amount, 0);
-
-        const endingBalance = cashIn - cashOut;
+        const endingBalance = openingBalance + cashIn - cashOut;
 
         const sickFundCollected = paymentsForMonth.reduce((sum, p) => sum + (p.contributions.sick?.paid ? p.contributions.sick.amount : 0), 0);
         const bereavementFundCollected = paymentsForMonth.reduce((sum, p) => sum + (p.contributions.bereavement?.paid ? p.contributions.bereavement.amount : 0), 0);
@@ -95,7 +116,7 @@ export function MonthlyReport() {
         const bereavementFundSpent = expensesForMonth.filter(e => e.category === 'Kemalangan').reduce((sum, e) => sum + e.amount, 0);
 
 
-        return { cashIn, cashOut, endingBalance, sickFundCollected, bereavementFundCollected, sickFundSpent, bereavementFundSpent };
+        return { openingBalance, cashIn, cashOut, endingBalance, sickFundCollected, bereavementFundCollected, sickFundSpent, bereavementFundSpent };
     }, [selectedMonth, allPayments, allExpenses]);
 
 
@@ -137,7 +158,17 @@ export function MonthlyReport() {
           </div>
         </CardHeader>
         <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Saldo Awal Bulan Ini</CardTitle>
+                        <Landmark className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(reportData.openingBalance)}</div>
+                        <p className="text-xs text-muted-foreground">Saldo dari bulan sebelumnya</p>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Kas Masuk</CardTitle>
@@ -160,12 +191,12 @@ export function MonthlyReport() {
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Saldo Bulan Ini</CardTitle>
-                        <Banknote className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Saldo Akhir Bulan Ini</CardTitle>
+                        <BookOpenCheck className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{formatCurrency(reportData.endingBalance)}</div>
-                        <p className="text-xs text-muted-foreground">Selisih kas masuk dan keluar</p>
+                        <p className="text-xs text-muted-foreground">Akumulasi saldo hingga kini</p>
                     </CardContent>
                 </Card>
             </div>
@@ -206,5 +237,3 @@ export function MonthlyReport() {
     </div>
   );
 }
-
-    
