@@ -61,6 +61,7 @@ const generateMonthOptions = () => {
 // --- Detailed Table for Main Group ---
 const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contributionLabels }: { payments: (DetailedPayment & { member?: Member })[], onPaymentChange: (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => void, onAmountChange: (paymentId: string, contributionType: string, amount: number) => void, contributionLabels: Record<string, string>}) => {
   const contributionKeys = useMemo(() => {
+    // Explicitly define the order of the columns
     return ['main', 'cash', 'sick', 'bereavement', 'other1', 'other2', 'other3'];
   }, []);
 
@@ -127,7 +128,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contr
                                 <Checkbox
                                     id={`paid-${payment.id}-${type}`}
                                     checked={contribution.paid}
-                                    onCheckedChange={checked => onPaymentChange(payment.id, type, !!checked)}
+                                    onCheckedChange={checked => onPaymentChange(payment.id, type as keyof DetailedPayment['contributions'], !!checked)}
                                     aria-label={`Tandai ${label} untuk ${payment.member?.name} lunas`}
                                 />
                                 {isEditable ? (
@@ -309,6 +310,17 @@ export default function KeuanganPage() {
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
 
+  // You can ask the AI to modify the labels here in the future
+  const contributionLabels: Record<string, string> = {
+    main: 'Iuran Utama',
+    cash: 'Iuran Kas',
+    sick: 'Iuran Sakit',
+    bereavement: 'Iuran Kemalangan',
+    other1: 'Lainnya 1',
+    other2: 'Lainnya 2',
+    other3: 'Lainnya 3'
+  };
+
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -396,7 +408,6 @@ export default function KeuanganPage() {
     });
   }, [allExpenses, selectedMonth]);
 
-  const contributionLabels: Record<string, string> = { main: 'Iuran Utama', cash: 'Iuran Kas', sick: 'Iuran Sakit', bereavement: 'Iuran Kemalangan', other1: 'Lainnya 1', other2: 'Lainnya 2', other3: 'Lainnya 3' };
   
   // Payment handlers
   const handleDetailedPaymentChange = useCallback((paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -580,38 +591,50 @@ export default function KeuanganPage() {
         if (existingPayment) {
           // --- UPDATE EXISTING PAYMENT ---
           const paymentRef = doc(db, 'payments', existingPayment.id);
-          const updatedContributions: DetailedPayment['contributions'] = {
-            ...existingPayment.contributions,
-          };
-          
           let hasChanges = false;
-          if (isMainGroup) {
-              if (!updatedContributions.main || updatedContributions.main.amount !== fixedMainAmount) {
-                  updatedContributions.main = { ...updatedContributions.main, amount: fixedMainAmount, paid: updatedContributions.main?.paid || false };
-                  hasChanges = true;
-              }
-              if (!updatedContributions.cash || updatedContributions.cash.amount !== fixedCashAmount) {
-                  updatedContributions.cash = { ...updatedContributions.cash, amount: fixedCashAmount, paid: updatedContributions.cash?.paid || false };
-                   hasChanges = true;
-              }
-              // Ensure social funds exist, preserving their existing values
-              updatedContributions.sick = updatedContributions.sick || { amount: 0, paid: false };
-              updatedContributions.bereavement = updatedContributions.bereavement || { amount: 0, paid: false };
-              updatedContributions.other1 = updatedContributions.other1 || { amount: 0, paid: false };
-              updatedContributions.other2 = updatedContributions.other2 || { amount: 0, paid: false };
-              updatedContributions.other3 = updatedContributions.other3 || { amount: 0, paid: false };
-          } else {
-             if (!updatedContributions.main || updatedContributions.main.amount !== group.contributionAmount) {
-                updatedContributions.main = { ...updatedContributions.main, amount: group.contributionAmount, paid: updatedContributions.main?.paid || false };
-                hasChanges = true;
-             }
+
+          const updatedContributions: DetailedPayment['contributions'] = {
+            main: { 
+              amount: isMainGroup ? fixedMainAmount : group.contributionAmount,
+              paid: existingPayment.contributions.main?.paid || false
+            },
+            cash: { 
+              amount: isMainGroup ? fixedCashAmount : 0,
+              paid: isMainGroup ? existingPayment.contributions.cash?.paid || false : true
+            },
+            sick: { 
+                amount: existingPayment.contributions.sick?.amount || 0,
+                paid: existingPayment.contributions.sick?.paid || false 
+            },
+            bereavement: {
+                amount: existingPayment.contributions.bereavement?.amount || 0,
+                paid: existingPayment.contributions.bereavement?.paid || false
+            },
+            other1: {
+                amount: existingPayment.contributions.other1?.amount || 0,
+                paid: existingPayment.contributions.other1?.paid || false
+            },
+            other2: {
+                amount: existingPayment.contributions.other2?.amount || 0,
+                paid: existingPayment.contributions.other2?.paid || false
+            },
+            other3: {
+                amount: existingPayment.contributions.other3?.amount || 0,
+                paid: existingPayment.contributions.other3?.paid || false
+            }
+          };
+
+          const totalAmount = Object.values(updatedContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
+          
+          if (JSON.stringify(existingPayment.contributions) !== JSON.stringify(updatedContributions) || existingPayment.totalAmount !== totalAmount) {
+              hasChanges = true;
           }
           
           if(hasChanges) {
-              const totalAmount = Object.values(updatedContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
               batch.update(paymentRef, { contributions: updatedContributions, totalAmount });
               updatedCount++;
           }
+
         } else {
           // --- CREATE NEW PAYMENT ---
           createdCount++;
