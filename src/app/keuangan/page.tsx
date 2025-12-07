@@ -347,7 +347,9 @@ export default function KeuanganPage() {
   }, [db, selectedMonth, toast, user]);
 
   const ensurePaymentsExistForMonth = useCallback(async () => {
-    if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings) return;
+    if (!db || !selectedGroup || allMembers.length === 0 || !contributionSettings) {
+      return;
+    }
   
     const syncKey = `${selectedGroup}-${selectedMonth}`;
     if (syncTracker.current.has(syncKey)) {
@@ -357,108 +359,107 @@ export default function KeuanganPage() {
     setIsGenerating(true);
   
     try {
-      if (!db) { 
-        throw new Error("Koneksi database tidak tersedia.");
-      }
-      await runTransaction(db, async (transaction) => {
-        if (!selectedGroup) throw new Error("Grup belum dipilih.");
-        
-        const group = allGroups.find(g => g.id === selectedGroup);
-        if (!group) throw new Error("Grup tidak ditemukan");
-
-        const settingsForMonth = contributionSettings;
-        const [year, month] = selectedMonth.split('-').map(Number);
-        
-        const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
-        const querySnapshot = await transaction.get(paymentsQuery);
-
-        const paymentsForGroup = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetailedPayment));
-        const paymentsForMonth = paymentsForGroup.filter(p => {
-          const paymentDate = new Date(p.dueDate);
-          return getYear(paymentDate) === year && getMonth(paymentDate) === month;
-        });
-
-        const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
-        let newPaymentsCount = 0;
-        let updatedPaymentsCount = 0;
-
-        // Check existing payments for correctness
-        paymentsForMonth.forEach(payment => {
-            let needsUpdate = false;
-            let newContributions: any = {};
-            let newTotalAmount = 0;
-
-            if (group.id === mainArisanGroup?.id) {
-                newContributions.main = { amount: settingsForMonth.main, paid: payment.contributions.main?.paid || false };
-                newContributions.cash = { amount: settingsForMonth.cash, paid: payment.contributions.cash?.paid || false };
-                newContributions.sick = { amount: settingsForMonth.sick, paid: payment.contributions.sick?.paid || false };
-                newContributions.bereavement = { amount: settingsForMonth.bereavement, paid: payment.contributions.bereavement?.paid || false };
-                settingsForMonth.others.forEach(other => {
-                    newContributions[other.id] = { amount: other.amount, paid: payment.contributions[other.id]?.paid || false };
-                });
-                newTotalAmount = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-            } else {
-                newTotalAmount = group.contributionAmount;
-                newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
-            }
-            
-            // Check if total amount or individual contributions differ
-            const currentTotalAmount = Object.values(payment.contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-            if (newTotalAmount !== currentTotalAmount) {
-              needsUpdate = true;
-            }
-
-            if (needsUpdate) {
-                const paymentRef = doc(db, 'payments', payment.id);
-                // Recalculate total amount based on paid status to be safe
-                const recalculatedTotal = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-                const updatedStatus = Object.values(newContributions).every((c: any) => c.paid) ? 'Paid' : 'Unpaid';
-                transaction.update(paymentRef, { 
-                  contributions: newContributions, 
-                  totalAmount: recalculatedTotal,
-                  status: updatedStatus
-                });
-                updatedPaymentsCount++;
-            }
-        });
-        
-        // Create new payments for members not in the list
-        group.memberIds.forEach(memberId => {
-          if (!existingMemberIds.has(memberId)) {
-            let contributions: any = {};
-            let totalAmount = 0;
-            const targetDate = new Date(year, month);
-            const dueDate = endOfMonth(targetDate).toISOString();
-    
-            if (group.id === mainArisanGroup?.id) {
-              contributions.main = { amount: settingsForMonth.main, paid: false };
-              contributions.cash = { amount: settingsForMonth.cash, paid: false };
-              contributions.sick = { amount: settingsForMonth.sick, paid: false };
-              contributions.bereavement = { amount: settingsForMonth.bereavement, paid: false };
-              settingsForMonth.others.forEach(other => {
-                contributions[other.id] = { amount: other.amount, paid: false };
-              });
-              totalAmount = Object.values(contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
-            } else {
-              totalAmount = group.contributionAmount;
-              contributions.main = { amount: totalAmount, paid: false };
-            }
-    
-            const newPaymentDoc = doc(collection(db, 'payments'));
-            transaction.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
-            newPaymentsCount++;
-          }
-        });
-
-        if (newPaymentsCount > 0 || updatedPaymentsCount > 0) {
-            let descriptions = [];
-            if (newPaymentsCount > 0) descriptions.push(`${newPaymentsCount} catatan iuran baru dibuat.`);
-            if (updatedPaymentsCount > 0) descriptions.push(`${updatedPaymentsCount} catatan iuran diperbarui.`);
-            toast({
-              title: "Sinkronisasi Selesai",
-              description: descriptions.join(' '),
-            });
+        if (!db || !selectedGroup) {
+            throw new Error("Koneksi database atau grup yang dipilih tidak tersedia.");
         }
+        
+        await runTransaction(db, async (transaction) => {
+            const group = allGroups.find(g => g.id === selectedGroup);
+            if (!group) throw new Error("Grup tidak ditemukan");
+
+            const settingsForMonth = contributionSettings;
+            const [year, month] = selectedMonth.split('-').map(Number);
+            
+            const paymentsQuery = query(collection(db, 'payments'), where('groupId', '==', selectedGroup));
+            const querySnapshot = await transaction.get(paymentsQuery);
+
+            const paymentsForGroup = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetailedPayment));
+            const paymentsForMonth = paymentsForGroup.filter(p => {
+            const paymentDate = new Date(p.dueDate);
+            return getYear(paymentDate) === year && getMonth(paymentDate) === month;
+            });
+
+            const existingMemberIds = new Set(paymentsForMonth.map(p => p.memberId));
+            let newPaymentsCount = 0;
+            let updatedPaymentsCount = 0;
+
+            // Check existing payments for correctness
+            paymentsForMonth.forEach(payment => {
+                let needsUpdate = false;
+                let newContributions: any = {};
+                let newTotalAmount = 0;
+
+                if (group.id === mainArisanGroup?.id) {
+                    newContributions.main = { amount: settingsForMonth.main, paid: payment.contributions.main?.paid || false };
+                    newContributions.cash = { amount: settingsForMonth.cash, paid: payment.contributions.cash?.paid || false };
+                    newContributions.sick = { amount: settingsForMonth.sick, paid: payment.contributions.sick?.paid || false };
+                    newContributions.bereavement = { amount: settingsForMonth.bereavement, paid: payment.contributions.bereavement?.paid || false };
+                    settingsForMonth.others.forEach(other => {
+                        newContributions[other.id] = { amount: other.amount, paid: payment.contributions[other.id]?.paid || false };
+                    });
+                    newTotalAmount = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
+                } else {
+                    newTotalAmount = group.contributionAmount;
+                    newContributions.main = { amount: newTotalAmount, paid: payment.contributions.main?.paid || false };
+                }
+                
+                // Check if total amount or individual contributions differ
+                const currentTotalAmount = Object.values(payment.contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
+                if (newTotalAmount !== currentTotalAmount) {
+                needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    const paymentRef = doc(db, 'payments', payment.id);
+                    // Recalculate total amount based on paid status to be safe
+                    const recalculatedTotal = Object.values(newContributions).reduce((sum: number, c: any) => sum + c.amount, 0);
+                    const updatedStatus = Object.values(newContributions).every((c: any) => c.paid) ? 'Paid' : 'Unpaid';
+                    transaction.update(paymentRef, { 
+                    contributions: newContributions, 
+                    totalAmount: recalculatedTotal,
+                    status: updatedStatus
+                    });
+                    updatedPaymentsCount++;
+                }
+            });
+            
+            // Create new payments for members not in the list
+            group.memberIds.forEach(memberId => {
+            if (!existingMemberIds.has(memberId)) {
+                let contributions: any = {};
+                let totalAmount = 0;
+                const targetDate = new Date(year, month);
+                const dueDate = endOfMonth(targetDate).toISOString();
+        
+                if (group.id === mainArisanGroup?.id) {
+                contributions.main = { amount: settingsForMonth.main, paid: false };
+                contributions.cash = { amount: settingsForMonth.cash, paid: false };
+                contributions.sick = { amount: settingsForMonth.sick, paid: false };
+                contributions.bereavement = { amount: settingsForMonth.bereavement, paid: false };
+                settingsForMonth.others.forEach(other => {
+                    contributions[other.id] = { amount: other.amount, paid: false };
+                });
+                totalAmount = Object.values(contributions).reduce((sum: number, c: any) => sum + c.amount, 0);
+                } else {
+                totalAmount = group.contributionAmount;
+                contributions.main = { amount: totalAmount, paid: false };
+                }
+        
+                const newPaymentDoc = doc(collection(db, 'payments'));
+                transaction.set(newPaymentDoc, { memberId, groupId: group.id, dueDate, contributions, totalAmount, status: 'Unpaid' });
+                newPaymentsCount++;
+            }
+            });
+
+            if (newPaymentsCount > 0 || updatedPaymentsCount > 0) {
+                let descriptions = [];
+                if (newPaymentsCount > 0) descriptions.push(`${newPaymentsCount} catatan iuran baru dibuat.`);
+                if (updatedPaymentsCount > 0) descriptions.push(`${updatedPaymentsCount} catatan iuran diperbarui.`);
+                toast({
+                title: "Sinkronisasi Selesai",
+                description: descriptions.join(' '),
+                });
+            }
       });
       syncTracker.current.add(syncKey);
     } catch (error: any) {
@@ -562,7 +563,10 @@ export default function KeuanganPage() {
     const category = socialContributionMapping[contributionType as string];
     if (category && contributionType !== 'cash') {
         try {
-            if (!db) return; // Add a guard clause for db
+            if (!db) {
+                toast({ title: 'Gagal Sinkronisasi', description: 'Koneksi database tidak tersedia.', variant: 'destructive'});
+                return;
+            }
             await runTransaction(db, async (transaction) => {
                 const sourcePaymentCompositeId = `${paymentId}_${contributionType}`;
                 const expensesQuery = query(collection(db, "expenses"), where("sourcePaymentId", "==", sourcePaymentCompositeId));
