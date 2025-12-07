@@ -182,7 +182,7 @@ const SimplePaymentTable = ({ payments, onStatusChange }: { payments: (DetailedP
     )
 }
 
-const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void }) => {
+const ExpenseDialog = ({ expense, isOpen, onClose, onSave, categories }: { expense: Partial<Expense> | null, isOpen: boolean, onClose: () => void, onSave: (expense: Omit<Expense, 'id'>, id?: string) => void, categories: string[] }) => {
   const [formData, setFormData] = useState<Partial<Expense> | null>(expense);
   const { toast } = useToast();
 
@@ -190,7 +190,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, [e.target.id]: e.target.value }));
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, [e.target.id]: Number(e.target.value) }));
-  const handleCategoryChange = (value: Expense['category']) => setFormData(prev => ({ ...prev, category: value }));
+  const handleCategoryChange = (value: string) => setFormData(prev => ({ ...prev, category: value }));
 
   const handleSave = () => {
     if (!formData?.description || !formData?.date || !formData?.amount || !formData?.category) {
@@ -215,7 +215,11 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
           <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="description" className="text-right">Deskripsi</Label><Textarea id="description" value={formData?.description || ''} onChange={handleChange} className="col-span-3" /></div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="category" className="text-right">Kategori</Label>
-            <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="Sakit">Anggota Sakit</SelectItem><SelectItem value="Kemalangan">Anggota Kemalangan</SelectItem><SelectItem value="Iuran Anggota">Iuran Anggota</SelectItem><SelectItem value="Talangan Kas">Talangan Kas</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select>
+            <Select value={formData?.category} onValueChange={handleCategoryChange}><SelectTrigger id="category" className="col-span-3"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
+            <SelectContent>
+                {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+            </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="amount" className="text-right">Jumlah</Label><Input id="amount" type="number" value={formData?.amount || ''} onChange={handleAmountChange} className="col-span-3" placeholder="Contoh: 50000" /></div>
         </div>
@@ -498,11 +502,18 @@ export default function KeuanganPage() {
     return labels;
   }, [contributionSettings]);
 
-  const socialContributionMapping: Record<string, Expense['category']> = {
-    main: 'Iuran Anggota',
-    sick: 'Sakit',
-    bereavement: 'Kemalangan',
-  };
+  const socialContributionMapping: Record<string, string> = useMemo(() => {
+    if (!contributionSettings) return {};
+    const mapping: Record<string, string> = {
+        main: 'Iuran Utama',
+        sick: 'Iuran Sakit',
+        bereavement: 'Iuran Kemalangan',
+    };
+    contributionSettings.others.forEach(other => {
+        mapping[other.id] = other.description;
+    });
+    return mapping;
+  }, [contributionSettings]);
 
   // Payment handlers
   const handleDetailedPaymentChange = async (paymentId: string, contributionType: keyof DetailedPayment['contributions'], isPaid: boolean) => {
@@ -531,11 +542,9 @@ export default function KeuanganPage() {
       })
     );
 
-    // Auto-create/delete expense logic
+    // Auto-create/delete expense logic for social contributions (not cash)
     const category = socialContributionMapping[contributionType as string];
-    const isAutoExpenseType = category || contributionSettings?.others.some(o => o.id === contributionType);
-
-    if (isAutoExpenseType) {
+    if (category && contributionType !== 'cash') {
         try {
             await runTransaction(db, async (transaction) => {
                 const sourcePaymentCompositeId = `${paymentId}_${contributionType}`;
@@ -544,26 +553,12 @@ export default function KeuanganPage() {
 
                 if (isPaid) {
                     if (querySnapshot.empty) {
-                        let expenseCategory: Expense['category'] = 'Lainnya';
-                        let expenseDescription = `Iuran dari ${member.name}`;
-
-                        if (category) {
-                            expenseCategory = category;
-                            expenseDescription = `Iuran ${category} dari ${member.name}`;
-                        } else {
-                            const otherInfo = contributionSettings?.others.find(o => o.id === contributionType);
-                            if (otherInfo) {
-                                expenseCategory = 'Iuran Anggota';
-                                expenseDescription = `Iuran "${otherInfo.description}" dari ${member.name}`;
-                            }
-                        }
-
                         const newExpenseRef = doc(collection(db, 'expenses'));
                         transaction.set(newExpenseRef, {
                             date: payment.dueDate,
-                            description: expenseDescription,
+                            description: `${category} dari ${member.name}`,
                             amount: payment.contributions[contributionType].amount,
-                            category: expenseCategory,
+                            category: category,
                             sourcePaymentId: sourcePaymentCompositeId
                         });
                     }
@@ -598,7 +593,6 @@ export default function KeuanganPage() {
   
   const savePaymentChanges = async () => {
     if (!db) return;
-    const batch = writeBatch(db);
     const changesToSave = localChanges.filter(local => allPayments.some(original => original.id === local.id && JSON.stringify(original) !== JSON.stringify(local)));
 
     if (changesToSave.length === 0) {
@@ -606,6 +600,7 @@ export default function KeuanganPage() {
         return;
     }
 
+    const batch = writeBatch(db);
     changesToSave.forEach(payment => {
         const { id, member, ...paymentData } = payment;
         batch.update(doc(db, "payments", id), paymentData);
@@ -755,7 +750,7 @@ export default function KeuanganPage() {
                                         <TableRow key={expense.id}>
                                         <TableCell>{format(new Date(expense.date), 'd MMMM yyyy', { locale: id })}</TableCell>
                                         <TableCell className="font-medium">{expense.description}</TableCell>
-                                        <TableCell><Badge variant={expense.category === 'Sakit' ? 'destructive' : expense.category === 'Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
+                                        <TableCell><Badge variant={expense.category === 'Iuran Sakit' ? 'destructive' : expense.category === 'Iuran Kemalangan' ? 'outline' : 'secondary'}>{expense.category}</Badge></TableCell>
                                         <TableCell>{formatCurrency(expense.amount)}</TableCell>
                                         <TableCell className="text-right">
                                             {!expense.sourcePaymentId && ( // Only allow edit/delete for manual expenses
@@ -790,7 +785,7 @@ export default function KeuanganPage() {
                     {renderContent()}
                 </main>
             </div>
-            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} />}
+            {isExpenseDialogOpen && <ExpenseDialog expense={selectedExpense} isOpen={isExpenseDialogOpen} onClose={() => setIsExpenseDialogOpen(false)} onSave={handleSaveExpense} categories={Object.values(contributionLabels)} />}
         </SidebarInset>
     </SidebarProvider>
   );

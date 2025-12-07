@@ -245,13 +245,7 @@
         },
         "category": {
           "type": "string",
-          "enum": [
-            "Sakit",
-            "Kemalangan",
-            "Iuran Anggota",
-            "Talangan Kas",
-            "Lainnya"
-          ]
+          "description": "The category of the expense, which should correspond to a contribution type name."
         },
         "sourcePaymentId": {
             "type": "string",
