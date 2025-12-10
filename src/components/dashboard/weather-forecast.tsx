@@ -1,22 +1,22 @@
 'use client';
 
-import { CloudSun, Thermometer, Loader2, MapPinOff } from 'lucide-react';
+import { CloudSun, Thermometer, Loader2, MapPinOff, Cloud, Sun, CloudRain, CloudLightning, Snowflake, CloudFog } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-// Data cuaca tiruan. Di aplikasi nyata, ini akan berasal dari API.
-const getMockWeatherForCoords = (lat: number, lon: number) => {
-    // Di aplikasi nyata, Anda akan memanggil API cuaca di sini dengan lat/lon
-    console.log(`Fetching weather for: ${lat}, ${lon}`);
-    return {
-        location: 'Lokasi Anda',
-        temperature: 30, // Suhu tiruan
-        condition: 'Cerah', // Kondisi tiruan
-    };
+// Fungsi untuk menerjemahkan kode cuaca WMO ke ikon dan teks
+const getWeatherInfo = (code: number): { icon: React.ReactNode, condition: string } => {
+    if (code === 0) return { icon: <Sun className="h-5 w-5 text-yellow-400" />, condition: 'Cerah' };
+    if (code >= 1 && code <= 3) return { icon: <CloudSun className="h-5 w-5 text-yellow-400" />, condition: 'Berawan' };
+    if (code === 45 || code === 48) return { icon: <CloudFog className="h-5 w-5 text-gray-400" />, condition: 'Berkabut' };
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { icon: <CloudRain className="h-5 w-5 text-blue-400" />, condition: 'Hujan' };
+    if (code >= 71 && code <= 77) return { icon: <Snowflake className="h-5 w-5 text-blue-300" />, condition: 'Salju' };
+    if (code >= 95 && code <= 99) return { icon: <CloudLightning className="h-5 w-5 text-yellow-500" />, condition: 'Badai' };
+    return { icon: <Cloud className="h-5 w-5 text-gray-400" />, condition: 'Berawan' };
 };
 
 
 export function WeatherForecast() {
-  const [weather, setWeather] = useState<{location: string, temperature: number, condition: string} | null>(null);
+  const [weather, setWeather] = useState<{location: string, temperature: number, code: number} | null>(null);
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [isVisible, setIsVisible] = useState(false);
@@ -28,14 +28,24 @@ export function WeatherForecast() {
     if (typeof window !== 'undefined' && 'geolocation' in navigator) {
         setStatus('loading');
         navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
                 const { latitude, longitude } = position.coords;
-                // Simulasikan pengambilan data dari API
-                setTimeout(() => {
-                    const mockData = getMockWeatherForCoords(latitude, longitude);
-                    setWeather(mockData);
+                try {
+                    const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+                    if (!response.ok) {
+                        throw new Error('Gagal mengambil data cuaca.');
+                    }
+                    const data = await response.json();
+                    setWeather({
+                        location: 'Lokasi Anda', // Open-Meteo tidak menyediakan nama lokasi
+                        temperature: Math.round(data.current_weather.temperature),
+                        code: data.current_weather.weathercode,
+                    });
                     setStatus('success');
-                }, 1000); // Penundaan untuk simulasi panggilan jaringan
+                } catch (error) {
+                    setErrorMessage('Gagal menghubungi layanan cuaca.');
+                    setStatus('error');
+                }
             },
             (error) => {
                 let message = "Terjadi kesalahan saat mengakses lokasi.";
@@ -60,7 +70,7 @@ export function WeatherForecast() {
     return (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Mencari lokasi...</span>
+            <span>Mendapatkan data cuaca...</span>
         </div>
     );
   }
@@ -75,12 +85,17 @@ export function WeatherForecast() {
   }
 
   if (status === 'success' && weather) {
+    const { icon, condition } = getWeatherInfo(weather.code);
     return (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CloudSun className="h-5 w-5 text-yellow-400" />
-            <span>{weather.condition}</span>
-            <Thermometer className="h-5 w-5 text-red-500" />
-            <span>{weather.temperature}°C di {weather.location}</span>
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1">
+                {icon}
+                <span>{condition}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <Thermometer className="h-5 w-5 text-red-500" />
+                <span>{weather.temperature}°C di {weather.location}</span>
+            </div>
         </div>
     );
   }
