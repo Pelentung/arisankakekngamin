@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFirestore, useAuth } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, writeBatch, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, getDoc, setDoc, orderBy, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
@@ -280,7 +280,6 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
 };
 
 const defaultContributionSettings: ContributionSettings = {
-    id: 'defaults',
     main: 0,
     cash: 0,
     sick: 0,
@@ -304,7 +303,6 @@ export default function KeuanganPage() {
   const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [mainArisanGroup, setMainArisanGroup] = useState<Group | null>(null);
-  const [contributionSettings, setContributionSettings] = useState<ContributionSettings>(defaultContributionSettings);
 
 
   // Page state
@@ -357,25 +355,16 @@ export default function KeuanganPage() {
         }
       }
     });
-    const unsubSettings = subscribeToData(db, 'contributionSettings', (data) => {
-        if (data.length > 0) {
-            const settingsData = data.find(d => d.id === 'defaults');
-            if (settingsData) {
-                setContributionSettings(settingsData as ContributionSettings);
-            }
-        }
-    });
     
     Promise.all([
         new Promise<void>(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(); unsub(); }); }),
         new Promise<void>(resolve => { const unsub = subscribeToData(db, 'members', () => { resolve(); unsub(); }); }),
         new Promise<void>(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(); unsub(); }); }),
         new Promise<void>(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(); unsub(); }); }),
-        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'contributionSettings', () => { resolve(); unsub(); }); }),
     ]).finally(() => setIsLoading(false));
 
     return () => { 
-        unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses(); unsubSettings();
+        unsubPayments(); unsubMembers(); unsubGroups(); unsubExpenses();
     };
   }, [db, user]); 
 
@@ -511,23 +500,38 @@ export default function KeuanganPage() {
       toast({ title: "Sinkronisasi Gagal", description: "Database atau grup belum siap.", variant: "destructive" });
       return;
     }
-
+  
     setIsGenerating(true);
     let createdCount = 0;
     let updatedCount = 0;
     let deletedCount = 0;
-
+  
     try {
       const group = allGroups.find(g => g.id === selectedGroup);
       if (!group) throw new Error("Grup yang dipilih tidak ditemukan.");
-
+  
       const [year, month] = selectedMonth.split('-').map(Number);
       const dueDate = format(new Date(year, month, 1), 'yyyy-MM-dd');
-
+  
+      // --- Fetch Contribution Settings for the selected month ---
+      let contributionSettings: ContributionSettings = defaultContributionSettings;
+      const settingsRef = doc(db, 'contributionSettings', selectedMonth);
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists()) {
+        contributionSettings = settingsSnap.data() as ContributionSettings;
+      } else {
+        // Fallback: get the most recent settings if current month is not set
+        const q = query(collection(db, 'contributionSettings'), orderBy('__name__', 'desc'), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            contributionSettings = querySnapshot.docs[0].data() as ContributionSettings;
+        }
+      }
+      // --- End Fetch ---
+  
       const isMainGroup = group.name === 'Arisan Utama';
-      
       const batch = writeBatch(db);
-
+  
       const paymentsQuery = query(
         collection(db, 'payments'),
         where('groupId', '==', selectedGroup),
@@ -535,109 +539,92 @@ export default function KeuanganPage() {
       );
       const querySnapshot = await getDocs(paymentsQuery);
       const existingPaymentsDocs = querySnapshot.docs;
-
+  
       const paymentsByMember = new Map<string, (DetailedPayment & { id: string })[]>();
       existingPaymentsDocs.forEach(doc => {
-          const payment = { id: doc.id, ...doc.data() } as (DetailedPayment & { id: string });
-          if (!paymentsByMember.has(payment.memberId)) {
-              paymentsByMember.set(payment.memberId, []);
-          }
-          paymentsByMember.get(payment.memberId)!.push(payment);
+        const payment = { id: doc.id, ...doc.data() } as (DetailedPayment & { id: string });
+        if (!paymentsByMember.has(payment.memberId)) {
+          paymentsByMember.set(payment.memberId, []);
+        }
+        paymentsByMember.get(payment.memberId)!.push(payment);
       });
-
+  
       for (const [memberId, payments] of paymentsByMember.entries()) {
-          if (payments.length > 1) {
-              payments.sort((a, b) => {
-                  if (a.status === 'Paid' && b.status !== 'Paid') return -1;
-                  if (b.status === 'Paid' && a.status !== 'Paid') return 1;
-                  return b.totalAmount - a.totalAmount;
-              });
-
-              const paymentToKeep = payments[0];
-              const paymentsToDelete = payments.slice(1);
-              
-              paymentsToDelete.forEach(p => {
-                  batch.delete(doc(db, 'payments', p.id));
-                  deletedCount++;
-              });
-              paymentsByMember.set(memberId, [paymentToKeep]);
-          }
+        if (payments.length > 1) {
+          payments.sort((a, b) => (b.status === 'Paid' ? 1 : -1) - (a.status === 'Paid' ? 1 : -1) || b.totalAmount - a.totalAmount);
+          const paymentToKeep = payments[0];
+          const paymentsToDelete = payments.slice(1);
+          paymentsToDelete.forEach(p => {
+            batch.delete(doc(db, 'payments', p.id));
+            deletedCount++;
+          });
+          paymentsByMember.set(memberId, [paymentToKeep]);
+        }
       }
-
+  
       for (const memberId of group.memberIds) {
-        const existingPaymentArr = paymentsByMember.get(memberId);
-        const existingPayment = existingPaymentArr ? existingPaymentArr[0] : undefined;
+        const existingPayment = paymentsByMember.get(memberId)?.[0];
         
+        const oldContribs = existingPayment?.contributions || {};
+  
         let newContributions: DetailedPayment['contributions'];
-        let totalAmount: number;
-
+  
         if (isMainGroup) {
-            newContributions = {
-                main: { amount: contributionSettings.main, paid: false },
-                cash: { amount: contributionSettings.cash, paid: false },
-                sick: { amount: contributionSettings.sick, paid: false },
-                bereavement: { amount: contributionSettings.bereavement, paid: false },
-                other1: { amount: contributionSettings.other1, paid: false },
-                other2: { amount: contributionSettings.other2, paid: false },
-                other3: { amount: contributionSettings.other3, paid: false },
-            };
+          newContributions = {
+            main: { amount: contributionSettings.main, paid: oldContribs.main?.paid || false },
+            cash: { amount: contributionSettings.cash, paid: oldContribs.cash?.paid || false },
+            sick: { amount: contributionSettings.sick, paid: oldContribs.sick?.paid || false },
+            bereavement: { amount: contributionSettings.bereavement, paid: oldContribs.bereavement?.paid || false },
+            other1: { amount: contributionSettings.other1, paid: oldContribs.other1?.paid || false },
+            other2: { amount: contributionSettings.other2, paid: oldContribs.other2?.paid || false },
+            other3: { amount: contributionSettings.other3, paid: oldContribs.other3?.paid || false },
+          };
         } else {
-            newContributions = {
-                main: { amount: group.contributionAmount, paid: false },
-                cash: { amount: 0, paid: true },
-                sick: { amount: 0, paid: true },
-                bereavement: { amount: 0, paid: true },
-                other1: { amount: 0, paid: true },
-                other2: { amount: 0, paid: true },
-                other3: { amount: 0, paid: true },
-            };
+          newContributions = {
+            main: { amount: group.contributionAmount, paid: oldContribs.main?.paid || false },
+            cash: { amount: 0, paid: true },
+            sick: { amount: 0, paid: true },
+            bereavement: { amount: 0, paid: true },
+            other1: { amount: 0, paid: true },
+            other2: { amount: 0, paid: true },
+            other3: { amount: 0, paid: true },
+          };
         }
         
-        totalAmount = Object.values(newContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
-
+        const totalAmount = Object.values(newContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
+  
         if (existingPayment) {
-            const paymentRef = doc(db, 'payments', existingPayment.id);
-            const oldContribs = existingPayment.contributions || {};
-
-            Object.keys(newContributions).forEach(key => {
-                if (oldContribs[key]) {
-                    newContributions[key as keyof DetailedPayment['contributions']].paid = oldContribs[key].paid;
-                }
-            });
-            
-            if (JSON.stringify(oldContribs) !== JSON.stringify(newContributions) || existingPayment.totalAmount !== totalAmount) {
-                batch.update(paymentRef, { contributions: newContributions, totalAmount });
-                updatedCount++;
-            }
-
+          const paymentRef = doc(db, 'payments', existingPayment.id);
+          batch.update(paymentRef, { contributions: newContributions, totalAmount });
+          updatedCount++;
         } else {
-            createdCount++;
-            const newPaymentRef = doc(collection(db, 'payments'));
-            batch.set(newPaymentRef, {
-                memberId,
-                groupId: selectedGroup,
-                dueDate,
-                contributions: newContributions,
-                totalAmount,
-                status: 'Unpaid',
-            });
+          createdCount++;
+          const newPaymentRef = doc(collection(db, 'payments'));
+          batch.set(newPaymentRef, {
+            memberId,
+            groupId: selectedGroup,
+            dueDate,
+            contributions: newContributions,
+            totalAmount,
+            status: 'Unpaid',
+          });
         }
       }
       
       await batch.commit();
-
+  
       toast({
         title: "Sinkronisasi Selesai",
         description: `Iuran untuk ${format(parse(selectedMonth, 'yyyy-M', new Date()), 'MMMM yyyy', { locale: id })}: ${createdCount} dibuat, ${updatedCount} diperbarui, ${deletedCount} duplikat dihapus.`
       });
-
+  
     } catch (e: any) {
       toast({ title: "Sinkronisasi Gagal", description: e.message || "Terjadi kesalahan saat sinkronisasi.", variant: "destructive" });
-       console.error("Sync Error:", e);
+      console.error("Sync Error:", e);
     } finally {
       setIsGenerating(false);
     }
-  }, [db, selectedGroup, selectedMonth, allGroups, contributionSettings, toast]);
+  }, [db, selectedGroup, selectedMonth, allGroups, toast]);
 
   if (isLoadingAuth || !user) {
     return (
