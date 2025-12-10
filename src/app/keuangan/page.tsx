@@ -603,16 +603,16 @@ export default function KeuanganPage() {
         if (existingPayment) {
           // --- UPDATE EXISTING PAYMENT ---
           const paymentRef = doc(db, 'payments', existingPayment.id);
-          let hasChanges = false;
-
-          const updatedContributions: DetailedPayment['contributions'] = {
+          
+          // Rebuild contributions object to ensure all keys exist
+          const newContributions: DetailedPayment['contributions'] = {
             main: { 
               amount: isMainGroup ? fixedMainAmount : group.contributionAmount,
               paid: existingPayment.contributions.main?.paid || false
             },
             cash: { 
               amount: isMainGroup ? fixedCashAmount : 0,
-              paid: isMainGroup ? existingPayment.contributions.cash?.paid || false : true
+              paid: isMainGroup ? (existingPayment.contributions.cash?.paid || false) : true
             },
             sick: { 
                 amount: existingPayment.contributions.sick?.amount || 0,
@@ -636,14 +636,11 @@ export default function KeuanganPage() {
             }
           };
 
-          const totalAmount = Object.values(updatedContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
+          const totalAmount = Object.values(newContributions).reduce((sum, c) => sum + (c?.amount || 0), 0);
           
-          if (JSON.stringify(existingPayment.contributions) !== JSON.stringify(updatedContributions) || existingPayment.totalAmount !== totalAmount) {
-              hasChanges = true;
-          }
-          
-          if(hasChanges) {
-              batch.update(paymentRef, { contributions: updatedContributions, totalAmount });
+          // Check if there are actual changes before writing to batch
+          if (JSON.stringify(existingPayment.contributions) !== JSON.stringify(newContributions) || existingPayment.totalAmount !== totalAmount) {
+              batch.update(paymentRef, { contributions: newContributions, totalAmount });
               updatedCount++;
           }
 
