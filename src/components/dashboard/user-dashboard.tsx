@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -15,6 +14,7 @@ import Image from 'next/image';
 import { AllMembersList } from './all-members-list';
 import { CurrentWinnerCard } from './current-winner-card';
 import { FinancialSummary } from './financial-summary';
+import { WeatherForecast } from './weather-forecast';
 
 
 export function UserDashboard() {
@@ -39,12 +39,15 @@ export function UserDashboard() {
                             ARISAN KELUARGA Alm. KAKEK NGAMIN
                         </h1>
                     </div>
-                    <div className="flex items-center gap-4 self-end sm:self-center">
-                        <RealTimeClock />
-                        <Button variant="outline" onClick={handleSignOut}>
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Keluar
-                        </Button>
+                    <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-4">
+                            <RealTimeClock />
+                            <Button variant="outline" onClick={handleSignOut} size="sm">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                Keluar
+                            </Button>
+                        </div>
+                         <WeatherForecast />
                     </div>
                  </div>
                  
