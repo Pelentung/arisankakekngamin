@@ -132,7 +132,7 @@ const DetailedPaymentTable = ({ payments, onPaymentChange, onAmountChange, contr
                                     aria-label={`Tandai ${label} untuk ${payment.member?.name} lunas`}
                                 />
                                 {isEditable ? (
-                                    <Input
+                                     <Input
                                         type="number"
                                         value={contribution.amount}
                                         onChange={(e) => onAmountChange(payment.id, type, Number(e.target.value))}
@@ -282,6 +282,7 @@ const ExpenseDialog = ({ expense, isOpen, onClose, onSave }: { expense: Partial<
 };
 
 const defaultContributionLabels: ContributionSettings = {
+    id: 'labels',
     main: 'Iuran Utama',
     cash: 'Iuran Kas',
     sick: 'Iuran Sakit',
@@ -341,19 +342,6 @@ export default function KeuanganPage() {
     
     setIsLoading(true);
 
-    // Fetch contribution labels
-    const fetchLabels = async () => {
-        const labelsDocRef = doc(db, 'contributionSettings', 'labels');
-        const docSnap = await getDoc(labelsDocRef);
-        if (docSnap.exists()) {
-            setContributionLabels(docSnap.data() as ContributionSettings);
-        } else {
-            // If not exists, create with default values
-            await setDoc(labelsDocRef, defaultContributionLabels);
-        }
-    };
-    fetchLabels();
-
     const unsubPayments = subscribeToData(db, 'payments', (data) => { 
         setAllPayments(data as DetailedPayment[]); 
         setLocalChanges(data as DetailedPayment[]);
@@ -381,11 +369,11 @@ export default function KeuanganPage() {
     });
     
     Promise.all([
-        new Promise(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'members', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(true); unsub(); }); }),
-        new Promise(resolve => { const unsub = subscribeToData(db, 'contributionSettings', () => { resolve(true); unsub(); }); }),
+        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'payments', () => { resolve(); unsub(); }); }),
+        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'members', () => { resolve(); unsub(); }); }),
+        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'expenses', () => { resolve(); unsub(); }); }),
+        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'groups', () => { resolve(); unsub(); }); }),
+        new Promise<void>(resolve => { const unsub = subscribeToData(db, 'contributionSettings', () => { resolve(); unsub(); }); }),
     ]).finally(() => setIsLoading(false));
 
     return () => { 
@@ -714,7 +702,7 @@ export default function KeuanganPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [db, selectedGroup, selectedMonth, allGroups, toast, allMembers]);
+  }, [db, selectedGroup, selectedMonth, allGroups, toast]);
 
   if (isLoadingAuth || !user) {
     return (
@@ -868,5 +856,7 @@ export default function KeuanganPage() {
     </SidebarProvider>
   );
 }
+
+    
 
     
